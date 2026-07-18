@@ -1,4 +1,7 @@
-﻿bool appRunning = true;
+﻿using System;
+
+
+bool appRunning = true;
 
 do
 {
@@ -30,3 +33,5 @@ do
     }
 
 }while (appRunning);
+
+
