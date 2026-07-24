@@ -3,6 +3,7 @@ namespace Pharmacy.Models;
     public class Medicine
     {
         public int Id { get; set; }
+        public string MedicineCode { get; set; } = "Null";
         public string Name { get; set; } = "Medicine Null";
         public string Category { get; set; } = "Category Null";
         public double Price { get; set; }

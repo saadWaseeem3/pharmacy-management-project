@@ -8,7 +8,7 @@ public class InventoryManager
 {
     private readonly DatabaseManager db = new DatabaseManager();
     
-
+    
 
     public void DisplayTotalInventory()
     {
@@ -24,7 +24,7 @@ public class InventoryManager
 
         foreach (var medicine in Stock)
         {
-            Console.WriteLine($"ID: {medicine.Id}, Name: {medicine.Name}, Category: {medicine.Category}, Price: {medicine.Price}, Quantity: {medicine.Quantity}");
+            Console.WriteLine($"ID: {medicine.Id},Medicine Code: {medicine.MedicineCode}, Name: {medicine.Name}, Category: {medicine.Category}, Price: {medicine.Price}, Quantity: {medicine.Quantity}");
         }
         Console.WriteLine("-----------------------------");
     }
@@ -43,8 +43,11 @@ public class InventoryManager
         Console.Write("Quantity: ");
         int qty = Convert.ToInt32(Console.ReadLine());
 
+        string medCode = GenerateMedCode(name, category);
+
         Medicine newMed = new Medicine
         {
+            MedicineCode = medCode,
             Name = name,
             Category = category,
             Price = price,
@@ -56,6 +59,12 @@ public class InventoryManager
         Console.WriteLine("Medicine added successfully.");
     }
 
+    public string GenerateMedCode(string name, string category)
+    {
+        string medCode = (category.Substring(0, 3) +"-"+ name.Substring(0, 3)).ToUpper();  
+        return medCode;
+     }
+        
 
 
 
