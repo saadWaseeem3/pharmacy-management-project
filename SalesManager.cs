@@ -7,11 +7,13 @@ using Pharmacy.Inventory;
 namespace Pharmacy.Sales;
 public class SalesManager
 {
-    private DatabaseManager db = new DatabaseManager();
-    private InventoryManager inventory = new InventoryManager();
+    private DatabaseManager _dbManager;
+    public SalesManager(DatabaseManager dbManager)
+    {
+        _dbManager = dbManager;
+    }
 
 
-      //string medicineCode = inventory.GenerateMedCode(medicine.Name, medicine.Category, medicine.Id);
 
 
 

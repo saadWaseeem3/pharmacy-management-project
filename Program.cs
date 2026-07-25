@@ -10,6 +10,8 @@ dbManager.InitializeDatabase();
 
 InventoryManager inventory = new InventoryManager(dbManager);
 
+SalesManager sales = new SalesManager(dbManager);
+
 bool appRunning = true;
 
 do
