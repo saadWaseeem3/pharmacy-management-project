@@ -5,8 +5,10 @@ using Pharmacy.Inventory;
 using Pharmacy.Models;
 
 Console.WriteLine("--Starting Pharmacy Applictaion--");
+DatabaseManager dbManager = new DatabaseManager();
+dbManager.InitializeDatabase();
 
-InventoryManager inventory = new InventoryManager();
+InventoryManager inventory = new InventoryManager(dbManager);
 
 bool appRunning = true;
 

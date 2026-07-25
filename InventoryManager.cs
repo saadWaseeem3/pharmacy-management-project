@@ -4,19 +4,26 @@ using Pharmacy.Models;
 using Pharmacy.Data;
 
 namespace Pharmacy.Inventory;
+
 public class InventoryManager
 {
-    private readonly DatabaseManager db = new DatabaseManager();
-    
-    
+    private readonly DatabaseManager _dbManager;
+
+    public InventoryManager(DatabaseManager dbManager)
+    {
+        _dbManager = dbManager;
+    }
+
+
+
 
     public void DisplayTotalInventory()
     {
         Console.WriteLine("----Total Inventory Report----");
 
-        List<Medicine> Stock = db.GetAllMedicines();
+        List<Medicine> Stock = _dbManager.GetAllMedicines();
 
-        if(Stock.Count == 0)
+        if (Stock.Count == 0)
         {
             Console.WriteLine("No medicines found in the inventory.");
             return;
@@ -30,41 +37,87 @@ public class InventoryManager
     }
 
 
+
     public void RestockMedicine()
     {
         Console.WriteLine("Enter the medicine details:");
-        Medicine medicine = new Medicine();
+
         Console.Write("Name: ");
-        string name = Console.ReadLine();
+        string? name = Console.ReadLine();
+
         Console.Write("Category: ");
-        string category = Console.ReadLine();
+        string? category = Console.ReadLine();
+
+        if(string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(category))
+        {
+            Console.WriteLine("[INPUT ERROR] Name and Category cannot be empty. Restock cancelled.");
+            return;
+        }
+
+        // 1. Validate inputs and generate code upfront
+        string? medCode = GenerateMedCode(name, category);
+        if (medCode == null)
+        {
+            Console.WriteLine("[RESTOCK CANCELLED] Failed to generate valid medicine code.");
+            return;
+        }
+
+        // 2. Safe Parsing for Price
         Console.Write("Price: ");
-        double price = Convert.ToDouble(Console.ReadLine());
+        if (!double.TryParse(Console.ReadLine(), out double price) || price < 0)
+        {
+            Console.WriteLine("[INPUT ERROR] Price must be a valid positive number. Restock cancelled.");
+            return;
+        }
+
+        // 3. Safe Parsing for Quantity
         Console.Write("Quantity: ");
-        int qty = Convert.ToInt32(Console.ReadLine());
+        if (!int.TryParse(Console.ReadLine(), out int qty) || qty < 0)
+        {
+            Console.WriteLine("[INPUT ERROR] Quantity must be a valid positive integer. Restock cancelled.");
+            return;
+        }
 
-        string medCode = GenerateMedCode(name, category);
-
+        // 4. Create and persist valid object (Name and Category guaranteed non-null here)
         Medicine newMed = new Medicine
         {
             MedicineCode = medCode,
-            Name = name,
-            Category = category,
+            Name = name!.Trim(),
+            Category = category!.Trim(),
             Price = price,
             Quantity = qty
         };
 
-        db.AddMedicine(newMed);
-        
+        _dbManager.AddMedicine(newMed);
+
         Console.WriteLine("Medicine added successfully.");
     }
-
-    public string GenerateMedCode(string name, string category)
+    public string? GenerateMedCode(string? name, string? category)
     {
-        string medCode = (category.Substring(0, 3) +"-"+ name.Substring(0, 3)).ToUpper();  
-        return medCode;
-     }
-        
+        // 1. Guard Clause: Check for null, empty, or whitespace-only inputs
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(category))
+        {
+            Console.WriteLine("[INPUT ERROR] Cannot generate code: Name and Category are required.");
+            return null;
+        }
+
+        string cleanName = name.Trim();
+        string cleanCategory = category.Trim();
+
+        // 2. Guard Clause: Ensure inputs have at least 3 characters
+        if (cleanName.Length < 3 || cleanCategory.Length < 3)
+        {
+            Console.WriteLine("[INPUT ERROR] Name and Category must be at least 3 characters long.");
+            return null;
+        }
+
+        // 3. Safe string extraction (Guaranteed not to throw exceptions)
+        string categoryPart = cleanCategory.Substring(0, 3);
+        string namePart = cleanName.Substring(0, 3);
+
+        return $"{categoryPart}-{namePart}".ToUpper();
+    }
+
 
 
 

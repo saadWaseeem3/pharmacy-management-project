@@ -4,22 +4,33 @@ using Microsoft.Data.Sqlite;
 using Pharmacy.Models;
 
 namespace Pharmacy.Data;
+
 public class DatabaseManager
 {
-    private readonly string _connectionString = "Data Source=pharmacy.db";
+    private readonly string _dbFilePath;
+    private readonly string _connectionString;
 
-    public DatabaseManager()
+    // Constructor: Assigns the file path and builds the connection string
+    public DatabaseManager(string dbFilePath = "pharmacy.db")
     {
-        InitializeDatabase();
+        _dbFilePath = dbFilePath;
+        _connectionString = $"Data Source={_dbFilePath}";
     }
 
-    private void InitializeDatabase()
+    public void InitializeDatabase()
     {
-        using (var connection = new SqliteConnection(_connectionString))
-        {
-            connection.Open();
+        CreateTables();
+    }
 
-            string createTableSql = @"
+    private bool CreateTables()
+    {
+        try
+        {
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                connection.Open();
+
+                string createTableSql = @"
                 CREATE TABLE IF NOT EXISTS Medicines (
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 MedicineCode TEXT UNIQUE NOT NULL,
@@ -29,67 +40,108 @@ public class DatabaseManager
                 Quantity INTEGER NOT NULL
             );";
 
-            using (var command = new SqliteCommand(createTableSql, connection))
-            {
-                command.ExecuteNonQuery();
+                using (var command = new SqliteCommand(createTableSql, connection))
+                {
+                    command.ExecuteNonQuery();
+                }
+
             }
-            
+
+            return true; //Initialization Succeeded
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Console.WriteLine($"[Init Error] Permission denied accessing path '{_dbFilePath}': {ex.Message}");
+            return false;
+        }
+        catch (SqliteException ex)
+        {
+            Console.WriteLine($"[Init Error] SQLite failure during startup (ErrorCode {ex.SqliteErrorCode}): {ex.Message}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Init Error] Unexpected error during database initialization: {ex.Message}");
+            return false;
         }
     }
 
     public void AddMedicine(Medicine medicine)
     {
-        using (var connection = new SqliteConnection(_connectionString))
+        try
         {
-            connection.Open();
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                connection.Open();
 
-            string insertSql = @"
+                string insertSql = @"
                 INSERT INTO Medicines (MedicineCode, Name, Category, Price, Quantity)
                 VALUES (@MedicineCode, @Name, @Category, @Price, @Quantity);";
 
-            using (var command = new SqliteCommand(insertSql, connection))
-            {
-                command.Parameters.AddWithValue("@MedicineCode", medicine.MedicineCode);
-                command.Parameters.AddWithValue("@Name", medicine.Name);
-                command.Parameters.AddWithValue("@Category", medicine.Category);
-                command.Parameters.AddWithValue("@Price", medicine.Price);
-                command.Parameters.AddWithValue("@Quantity", medicine.Quantity);
+                using (var command = new SqliteCommand(insertSql, connection))
+                {
+                    command.Parameters.AddWithValue("@MedicineCode", medicine.MedicineCode);
+                    command.Parameters.AddWithValue("@Name", medicine.Name);
+                    command.Parameters.AddWithValue("@Category", medicine.Category);
+                    command.Parameters.AddWithValue("@Price", medicine.Price);
+                    command.Parameters.AddWithValue("@Quantity", medicine.Quantity);
 
-                command.ExecuteNonQuery();
+                    command.ExecuteNonQuery();
+                }
             }
         }
+        catch (SqliteException ex)
+        {
+            Console.WriteLine($"[Database Error]: Failed to add medicine. Details: {ex.Message}");
+
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[System Error]: An unexpected error occurred: {ex.Message}");
+        }
     }
+
     public List<Medicine> GetAllMedicines()
     {
         List<Medicine> medicineList = new List<Medicine>();
-
-        using (var connection = new SqliteConnection(_connectionString))
+        try
         {
-            connection.Open();
-
-            string selectSql = "SELECT Id,MedicineCode, Name, Category, Price, Quantity FROM Medicines";
-
-            using (var command = new SqliteCommand(selectSql, connection))
+            using (var connection = new SqliteConnection(_connectionString))
             {
-                using (var reader = command.ExecuteReader())
+                connection.Open();
+
+                string selectSql = "SELECT Id,MedicineCode, Name, Category, Price, Quantity FROM Medicines";
+
+                using (var command = new SqliteCommand(selectSql, connection))
                 {
-                    while (reader.Read())
+                    using (var reader = command.ExecuteReader())
                     {
-                        Medicine med = new Medicine
+                        while (reader.Read())
                         {
-                            Id = reader.GetInt32(0),
-                            MedicineCode = reader.GetString(1),
-                            Name = reader.GetString(2),
-                            Category = reader.GetString(3),
-                            Price = reader.GetDouble(4),
-                            Quantity = reader.GetInt32(5)
+                            Medicine med = new Medicine
+                            {
+                                Id = reader.GetInt32(0),
+                                MedicineCode = reader.GetString(1),
+                                Name = reader.GetString(2),
+                                Category = reader.GetString(3),
+                                Price = reader.GetDouble(4),
+                                Quantity = reader.GetInt32(5)
 
-                        };
-                        medicineList.Add(med);
-                    }  
+                            };
+                            medicineList.Add(med);
+                        }
+                    }
                 }
-            }
 
+            }
+        }
+        catch (SqliteException ex)
+        {
+            Console.WriteLine($"[Database Error]: Failed to retrieve medicines: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[System Error]: Failed to load data: {ex.Message}");
         }
 
         return medicineList;
@@ -98,25 +150,25 @@ public class DatabaseManager
     public List<Medicine> SearchMedicinesByName(string searchTerm)
     {
         List<Medicine> results = new List<Medicine>();
-        if(string.IsNullOrWhiteSpace(searchTerm))
-        return results;
+        if (string.IsNullOrWhiteSpace(searchTerm))
+            return results;
 
         string querySql = @"
             SELECT Id, MedicineCode, Name, Category, Price, Quantity
             FROM Medicines
             WHERE Name LIKE @Search OR Category LIKE @Search;";
-        
+
         try
         {
-            using(var connection = new SqliteConnection(_connectionString))
+            using (var connection = new SqliteConnection(_connectionString))
             {
                 connection.Open();
 
-                using(var command = new SqliteCommand(querySql, connection))
+                using (var command = new SqliteCommand(querySql, connection))
                 {
-                    command.Parameters.AddWithValue("@searchTerm", $"%{searchTerm}%");
+                    command.Parameters.AddWithValue("@Search", $"%{searchTerm}%");
 
-                    using(var reader = command.ExecuteReader())
+                    using (var reader = command.ExecuteReader())
                     {
                         while (reader.Read())
                         {
@@ -134,40 +186,40 @@ public class DatabaseManager
                 }
             }
         }
-        catch(SqliteException ex)
+        catch (SqliteException ex)
         {
             Console.WriteLine($"[DATABASE ERROR] Search failed: {ex.Message}");
         }
-        catch(Exception ex)
+        catch (Exception ex)
         {
             Console.WriteLine($"[SYSTEM ERROR] Unexpected failure during search: {ex.Message}");
         }
         return results;
-                        
-    }      
 
-    public Medicine SearchMedicineByCode(string code)
+    }
+
+    public Medicine? SearchMedicineByCode(string code)
     {
-        Medicine results = new Medicine();
-        if(string.IsNullOrWhiteSpace(code))
-        return results;
+        
+        if (string.IsNullOrWhiteSpace(code))
+            return null;
 
         string querySql = @"
             SELECT Id, MedicineCode, Name, Category, Price, Quantity
             FROM Medicines
             WHERE UPPER(MedicineCode) = @code;";
-        
+
         try
         {
-            using(var connection = new SqliteConnection(_connectionString))
+            using (var connection = new SqliteConnection(_connectionString))
             {
                 connection.Open();
 
-                using(var command = new SqliteCommand(querySql, connection))
+                using (var command = new SqliteCommand(querySql, connection))
                 {
                     command.Parameters.AddWithValue("@code", code.ToUpper());
 
-                    using(var reader = command.ExecuteReader())
+                    using (var reader = command.ExecuteReader())
                     {
                         if (reader.Read())
                         {
@@ -185,7 +237,7 @@ public class DatabaseManager
                 }
             }
         }
-        catch(SqliteException ex)
+        catch (SqliteException ex)
         {
             Console.WriteLine($"[DATABASE ERROR] Code lookup failed: {ex.Message}");
         }
@@ -195,14 +247,14 @@ public class DatabaseManager
         }
 
         return null;
-    }        
+    }
 
 
-        
+
 
 
 }
-    
+
 
 
 
