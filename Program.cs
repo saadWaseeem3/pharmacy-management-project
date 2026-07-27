@@ -33,7 +33,36 @@ do
             Console.WriteLine("You Are in the Sales Section which is currently under development!");
             Console.WriteLine("This section will contain 2 sub sections as per the current plan");
             Console.WriteLine("1. Sales Entry\n2. Sales Report\n");
+
+            Console.WriteLine("Enter a choice: ");
+
+            if (!int.TryParse(Console.ReadLine(), out int salesubChoice))
+            {
+                Console.WriteLine("Invalid input.");
+                continue;
+            }
+            switch (salesubChoice)
+            {
+                case 1:
+                    Console.WriteLine("Enter the Medicine Code: ");
+                    string? code = Console.ReadLine();
+                    sales.SearchByCode(code);
+                    Console.WriteLine("Enter the Quantity: ");
+                    int quantity = Convert.ToInt32(Console.ReadLine());
+                    sales.ShowReceipt(quantity);
+                    break;
+                case 2:
+                    Console.WriteLine("You Are in the Sales Report Section which is currently under development!");
+                    break;
+                default:
+                    Console.WriteLine("You have selected an invalid option");
+                    break;
+            
+            
+            }
             break;
+
+            
         case 2:
             Console.WriteLine("\n[Inventory Management]\n1. Inventory Restock\n2. Total Inventory Report");
             Console.Write("Choose an option: ");

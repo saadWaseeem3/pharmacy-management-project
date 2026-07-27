@@ -198,11 +198,12 @@ public class DatabaseManager
 
     }
 
-    public Medicine? SearchMedicineByCode(string code)
+    public Medicine? SearchMedicineByCode(string? code)
     {
         
         if (string.IsNullOrWhiteSpace(code))
             return null;
+
 
         string querySql = @"
             SELECT Id, MedicineCode, Name, Category, Price, Quantity
