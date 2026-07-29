@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using Microsoft.Data.Sqlite;
 using Pharmacy.Models;
 
@@ -40,7 +42,24 @@ public class DatabaseManager
                 Quantity INTEGER NOT NULL
             );";
 
+                string createSalesTable = @"
+                CREATE TABLE IF NOT EXISTS Sales (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    TransactionId TEXT NOT NULL,
+                    MedicineCode TEXT NOT NULL,
+                    MedicineName TEXT NOT NULL,
+                    Quantity INTEGER NOT NULL,
+                    UnitPrice REAL NOT NULL,
+                    TotalPrice REAL NOT NULL,
+                    SaleDate TEXT NOT NULL
+                );";
+
                 using (var command = new SqliteCommand(createTableSql, connection))
+                {
+                    command.ExecuteNonQuery();
+                }
+
+                using (var command = new SqliteCommand(createSalesTable, connection))
                 {
                     command.ExecuteNonQuery();
                 }
@@ -51,9 +70,9 @@ public class DatabaseManager
         }
         catch (UnauthorizedAccessException ex)
         {
-            Console.WriteLine($"[Init Error] Permission denied accessing path '{_dbFilePath}': {ex.Message}");
+            Console.WriteLine($"[Init Error] Permission denied accessing path '{_dbFilePath}': { ex.Message}");
             return false;
-        }
+            }
         catch (SqliteException ex)
         {
             Console.WriteLine($"[Init Error] SQLite failure during startup (ErrorCode {ex.SqliteErrorCode}): {ex.Message}");
@@ -200,7 +219,7 @@ public class DatabaseManager
 
     public Medicine? SearchMedicineByCode(string? code)
     {
-        
+
         if (string.IsNullOrWhiteSpace(code))
             return null;
 
@@ -250,6 +269,82 @@ public class DatabaseManager
         return null;
     }
 
+    public List<SaleRecord> GetSaleHistory()
+    {
+        List<SaleRecord> history = new List<SaleRecord>();
+        string querySql = @"
+            SELECT Id, TransactionId, MedicineCode, MedicineName, Quantity, UnitPrice, TotalPrice, SaleDate
+            FROM Sales
+            ORDER BY Id DESC;";
+
+        try
+        {
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                connection.Open();
+                using (var command = new SqliteCommand(querySql, connection))
+                using (var reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        history.Add(new SaleRecord
+                        {
+                            Id = reader.GetInt32(0),
+                            TransactionId = reader.GetString(1),
+                            MedicineCode = reader.GetString(2),
+                            MedicineName = reader.GetString(3),
+                            Quantity = reader.GetInt32(4),
+                            UnitPrice = reader.GetDouble(5),
+                            TotalPrice = reader.GetDouble(6),
+                            SaleDate = reader.GetString(7)
+                        });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DATABASE ERROR] Failed to fetch sales history: {ex.Message}");
+        }
+
+        return history;
+    }
+
+    public void AddSaleRecord(SaleRecord saleRecord)
+    {
+        try
+        {
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                connection.Open();
+
+                string insertSql = @"
+                    INSERT INTO Sales (TransactionId, MedicineCode, MedicineName, Quantity, UnitPrice, TotalPrice, SaleDate)
+                    VALUES (@TransactionId, @MedicineCode, @MedicineName, @Quantity, @UnitPrice, @TotalPrice, @SaleDate);";
+
+                using (var command = new SqliteCommand(insertSql, connection))
+                {
+                    command.Parameters.AddWithValue("@TransactionId", saleRecord.TransactionId);
+                    command.Parameters.AddWithValue("@MedicineCode", saleRecord.MedicineCode);
+                    command.Parameters.AddWithValue("@MedicineName", saleRecord.MedicineName);
+                    command.Parameters.AddWithValue("@Quantity", saleRecord.Quantity);
+                    command.Parameters.AddWithValue("@UnitPrice", saleRecord.UnitPrice);
+                    command.Parameters.AddWithValue("@TotalPrice", saleRecord.TotalPrice);
+                    command.Parameters.AddWithValue("@SaleDate", saleRecord.SaleDate);
+
+                    command.ExecuteNonQuery();
+                }
+            }
+        }
+        catch(SqliteException ex)
+        {
+            Console.WriteLine($"[DATABASE ERROR] Failed to add sale record: {ex.Message}");
+        }
+        catch(Exception ex)
+        {
+            Console.WriteLine($"[SYSTEM ERROR] Unexpected failure during sale record addition: {ex.Message}");
+        }
+    }
 
 
 

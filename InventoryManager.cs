@@ -105,4 +105,6 @@ public class InventoryManager
 
         return $"{categoryPart}-{namePart}".ToUpper();
     }
+
+    
 }
