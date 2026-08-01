@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq.Expressions;
-using System.Runtime.CompilerServices;
 using Microsoft.Data.Sqlite;
 using Pharmacy.Models;
 
@@ -12,7 +10,6 @@ public class DatabaseManager
     private readonly string _dbFilePath;
     private readonly string _connectionString;
 
-    // Constructor: Assigns the file path and builds the connection string
     public DatabaseManager(string dbFilePath = "pharmacy.db")
     {
         _dbFilePath = dbFilePath;
@@ -34,13 +31,13 @@ public class DatabaseManager
 
                 string createTableSql = @"
                 CREATE TABLE IF NOT EXISTS Medicines (
-                Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                MedicineCode TEXT UNIQUE NOT NULL,
-                Name TEXT NOT NULL,
-                Category TEXT NOT NULL,
-                Price REAL NOT NULL,
-                Quantity INTEGER NOT NULL
-            );";
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    MedicineCode TEXT UNIQUE NOT NULL,
+                    Name TEXT NOT NULL,
+                    Category TEXT NOT NULL,
+                    Price REAL NOT NULL,
+                    Quantity INTEGER NOT NULL
+                );";
 
                 string createSalesTable = @"
                 CREATE TABLE IF NOT EXISTS Sales (
@@ -63,16 +60,15 @@ public class DatabaseManager
                 {
                     command.ExecuteNonQuery();
                 }
-
             }
 
-            return true; //Initialization Succeeded
+            return true;
         }
         catch (UnauthorizedAccessException ex)
         {
-            Console.WriteLine($"[Init Error] Permission denied accessing path '{_dbFilePath}': { ex.Message}");
+            Console.WriteLine($"[Init Error] Permission denied accessing path '{_dbFilePath}': {ex.Message}");
             return false;
-            }
+        }
         catch (SqliteException ex)
         {
             Console.WriteLine($"[Init Error] SQLite failure during startup (ErrorCode {ex.SqliteErrorCode}): {ex.Message}");
@@ -84,6 +80,10 @@ public class DatabaseManager
             return false;
         }
     }
+
+    // ==========================================
+    // INVENTORY OPERATIONS
+    // ==========================================
 
     public void AddMedicine(Medicine medicine)
     {
@@ -112,7 +112,6 @@ public class DatabaseManager
         catch (SqliteException ex)
         {
             Console.WriteLine($"[Database Error]: Failed to add medicine. Details: {ex.Message}");
-
         }
         catch (Exception ex)
         {
@@ -129,29 +128,24 @@ public class DatabaseManager
             {
                 connection.Open();
 
-                string selectSql = "SELECT Id,MedicineCode, Name, Category, Price, Quantity FROM Medicines";
+                string selectSql = "SELECT Id, MedicineCode, Name, Category, Price, Quantity FROM Medicines";
 
                 using (var command = new SqliteCommand(selectSql, connection))
+                using (var reader = command.ExecuteReader())
                 {
-                    using (var reader = command.ExecuteReader())
+                    while (reader.Read())
                     {
-                        while (reader.Read())
+                        medicineList.Add(new Medicine
                         {
-                            Medicine med = new Medicine
-                            {
-                                Id = reader.GetInt32(0),
-                                MedicineCode = reader.GetString(1),
-                                Name = reader.GetString(2),
-                                Category = reader.GetString(3),
-                                Price = reader.GetDouble(4),
-                                Quantity = reader.GetInt32(5)
-
-                            };
-                            medicineList.Add(med);
-                        }
+                            Id = reader.GetInt32(0),
+                            MedicineCode = reader.GetString(1),
+                            Name = reader.GetString(2),
+                            Category = reader.GetString(3),
+                            Price = reader.GetDouble(4),
+                            Quantity = reader.GetInt32(5)
+                        });
                     }
                 }
-
             }
         }
         catch (SqliteException ex)
@@ -213,16 +207,14 @@ public class DatabaseManager
         {
             Console.WriteLine($"[SYSTEM ERROR] Unexpected failure during search: {ex.Message}");
         }
-        return results;
 
+        return results;
     }
 
     public Medicine? SearchMedicineByCode(string? code)
     {
-
         if (string.IsNullOrWhiteSpace(code))
             return null;
-
 
         string querySql = @"
             SELECT Id, MedicineCode, Name, Category, Price, Quantity
@@ -269,6 +261,80 @@ public class DatabaseManager
         return null;
     }
 
+    // ==========================================
+    // SALES & CHECKOUT OPERATIONS
+    // ==========================================
+
+    /// <summary>
+    /// Executes an atomic batch transaction for cart checkout:
+    /// Deducts inventory stock and logs sales history together.
+    /// If any line item fails, the entire transaction rolls back.
+    /// </summary>
+    public bool AddSaleRecords(List<SaleRecord> records)
+    {
+        if (records == null || records.Count == 0)
+            return false;
+
+        using (var connection = new SqliteConnection(_connectionString))
+        {
+            connection.Open();
+
+            using (var transaction = connection.BeginTransaction())
+            {
+                try
+                {
+                    string updateStockSql = @"
+                        UPDATE Medicines 
+                        SET Quantity = Quantity - @Quantity 
+                        WHERE MedicineCode = @MedicineCode AND Quantity >= @Quantity;";
+
+                    string insertSaleSql = @"
+                        INSERT INTO Sales (TransactionId, MedicineCode, MedicineName, Quantity, UnitPrice, TotalPrice, SaleDate)
+                        VALUES (@TransactionId, @MedicineCode, @MedicineName, @Quantity, @UnitPrice, @TotalPrice, @SaleDate);";
+
+                    foreach (var record in records)
+                    {
+                        // 1. Deduct stock from Medicines table
+                        using (var updateCmd = new SqliteCommand(updateStockSql, connection, transaction))
+                        {
+                            updateCmd.Parameters.AddWithValue("@Quantity", record.Quantity);
+                            updateCmd.Parameters.AddWithValue("@MedicineCode", record.MedicineCode);
+
+                            int rowsAffected = updateCmd.ExecuteNonQuery();
+                            if (rowsAffected == 0)
+                            {
+                                throw new InvalidOperationException($"Stock deduction failed for {record.MedicineName} (Code: {record.MedicineCode}). Insufficient inventory.");
+                            }
+                        }
+
+                        // 2. Insert sales history snapshot
+                        using (var insertCmd = new SqliteCommand(insertSaleSql, connection, transaction))
+                        {
+                            insertCmd.Parameters.AddWithValue("@TransactionId", record.TransactionId);
+                            insertCmd.Parameters.AddWithValue("@MedicineCode", record.MedicineCode);
+                            insertCmd.Parameters.AddWithValue("@MedicineName", record.MedicineName);
+                            insertCmd.Parameters.AddWithValue("@Quantity", record.Quantity);
+                            insertCmd.Parameters.AddWithValue("@UnitPrice", record.UnitPrice);
+                            insertCmd.Parameters.AddWithValue("@TotalPrice", record.TotalPrice);
+                            insertCmd.Parameters.AddWithValue("@SaleDate", record.SaleDate);
+
+                            insertCmd.ExecuteNonQuery();
+                        }
+                    }
+
+                    transaction.Commit();
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine($"[TRANSACTION ERROR] Checkout failed and was rolled back: {ex.Message}");
+                    return false;
+                }
+            }
+        }
+    }
+
     public List<SaleRecord> GetSaleHistory()
     {
         List<SaleRecord> history = new List<SaleRecord>();
@@ -309,57 +375,4 @@ public class DatabaseManager
 
         return history;
     }
-
-    public void AddSaleRecord(SaleRecord saleRecord)
-    {
-        try
-        {
-            using (var connection = new SqliteConnection(_connectionString))
-            {
-                connection.Open();
-
-                string insertSql = @"
-                    INSERT INTO Sales (TransactionId, MedicineCode, MedicineName, Quantity, UnitPrice, TotalPrice, SaleDate)
-                    VALUES (@TransactionId, @MedicineCode, @MedicineName, @Quantity, @UnitPrice, @TotalPrice, @SaleDate);";
-
-                using (var command = new SqliteCommand(insertSql, connection))
-                {
-                    command.Parameters.AddWithValue("@TransactionId", saleRecord.TransactionId);
-                    command.Parameters.AddWithValue("@MedicineCode", saleRecord.MedicineCode);
-                    command.Parameters.AddWithValue("@MedicineName", saleRecord.MedicineName);
-                    command.Parameters.AddWithValue("@Quantity", saleRecord.Quantity);
-                    command.Parameters.AddWithValue("@UnitPrice", saleRecord.UnitPrice);
-                    command.Parameters.AddWithValue("@TotalPrice", saleRecord.TotalPrice);
-                    command.Parameters.AddWithValue("@SaleDate", saleRecord.SaleDate);
-
-                    command.ExecuteNonQuery();
-                }
-            }
-        }
-        catch(SqliteException ex)
-        {
-            Console.WriteLine($"[DATABASE ERROR] Failed to add sale record: {ex.Message}");
-        }
-        catch(Exception ex)
-        {
-            Console.WriteLine($"[SYSTEM ERROR] Unexpected failure during sale record addition: {ex.Message}");
-        }
-    }
-
-
-
-
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
