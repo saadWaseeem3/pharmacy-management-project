@@ -194,7 +194,8 @@ void RunInventoryMenu(InventoryManager inventory)
             Console.WriteLine("\n--- [INVENTORY MANAGEMENT] ---");
             Console.WriteLine("1. Restock / Add Medicine");
             Console.WriteLine("2. View Total Inventory");
-            Console.WriteLine("3. Return to Main Menu");
+            Console.WriteLine("3. Search Medicies by Name");
+            Console.WriteLine("4. Return to Main Menu");
             Console.Write("Choose an option: ");
 
             string? choice = Console.ReadLine();
@@ -208,10 +209,15 @@ void RunInventoryMenu(InventoryManager inventory)
                     inventory.DisplayTotalInventory();
                     break;
                 case "3":
+                    Console.WriteLine("Enter medicine name to search: ");
+                    string? nameQuery = Console.ReadLine();
+                    inventory.SearchAndDisplayByName(nameQuery ?? string.Empty);
+                    break;
+                case "4":
                     inInventoryMenu = false;
                     break;
                 default:
-                    Console.WriteLine("Invalid option. Enter 1, 2, or 3.");
+                    Console.WriteLine("Invalid option. Enter 1, 2, 3 or 4.");
                     break;
             }
         }
