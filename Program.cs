@@ -15,7 +15,15 @@ try
     dbManager.InitializeDatabase();
 
     InventoryManager inventory = new InventoryManager(dbManager);
-    SalesManager sales = new SalesManager(dbManager);
+
+    // --- SALESMAN LOGIN PROMPT ---
+    Console.Write("\nEnter Salesman ID (Press Enter for Default [1]): ");
+    string? salesmanInput = Console.ReadLine();
+    int activeSalesmanId = int.TryParse(salesmanInput, out int parsedId) ? parsedId : 1;
+
+    SalesManager sales = new SalesManager(dbManager, activeSalesmanId);
+    Console.WriteLine($"[Session Started] Active Salesman ID: {activeSalesmanId}");
+    
 
     bool appRunning = true;
 
@@ -193,9 +201,10 @@ void RunInventoryMenu(InventoryManager inventory)
         {
             Console.WriteLine("\n--- [INVENTORY MANAGEMENT] ---");
             Console.WriteLine("1. Restock / Add Medicine");
-            Console.WriteLine("2. View Total Inventory");
-            Console.WriteLine("3. Search Medicies by Name");
-            Console.WriteLine("4. Return to Main Menu");
+            Console.WriteLine("2. Add Bacthes");
+            Console.WriteLine("3. View Total Inventory");
+            Console.WriteLine("4. Search Medicies by Name");
+            Console.WriteLine("5. Return to Main Menu");
             Console.Write("Choose an option: ");
 
             string? choice = Console.ReadLine();
@@ -206,14 +215,17 @@ void RunInventoryMenu(InventoryManager inventory)
                     inventory.RestockMedicine();
                     break;
                 case "2":
-                    inventory.DisplayTotalInventory();
+                    inventory.AddBatch();
                     break;
                 case "3":
+                    inventory.DisplayTotalInventory();
+                    break;
+                case "4":
                     Console.WriteLine("Enter medicine name to search: ");
                     string? nameQuery = Console.ReadLine();
                     inventory.SearchAndDisplayByName(nameQuery ?? string.Empty);
                     break;
-                case "4":
+                case "5":
                     inInventoryMenu = false;
                     break;
                 default:

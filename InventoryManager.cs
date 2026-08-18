@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Pharmacy.Models;
 using Pharmacy.Data;
 using System.Text.RegularExpressions;
+using System.Globalization;
 
 namespace Pharmacy.Inventory;
 
@@ -19,7 +20,7 @@ public class InventoryManager
     {
         Console.WriteLine("----Total Inventory Report----");
 
-        List<Medicine> stock = _dbManager.GetAllMedicines() ?? new List<Medicine>();
+        List<MedicineWithBatch> stock = _dbManager.GetAllMedicines() ?? new List<MedicineWithBatch>();
 
         if (stock.Count == 0)
         {
@@ -29,7 +30,7 @@ public class InventoryManager
 
         foreach (var medicine in stock)
         {
-            Console.WriteLine($"ID: {medicine.Id}, Medicine Code: {medicine.MedicineCode}, Name: {medicine.Name}, Category: {medicine.Category}, Price: {medicine.Price}, Quantity: {medicine.Quantity}");
+            Console.WriteLine($"ID: {medicine.MedicineId}, Medicine Code: {medicine.MedicineCode}, Name: {medicine.Name}, Category: {medicine.Category}, Quantity: {medicine.TotalQuantity}, Price: {medicine.Price}");
         }
         Console.WriteLine("-----------------------------");
     }
@@ -70,14 +71,7 @@ public class InventoryManager
             return;
         }
 
-        // 4. Isolated Quantity Parsing
-        Console.Write("Quantity: ");
-        string? qtyInput = Console.ReadLine();
-        if (!int.TryParse(qtyInput, out int qty) || qty < 0)
-        {
-            Console.WriteLine("[INPUT ERROR] Quantity must be a valid positive integer. Restock cancelled.");
-            return;
-        }
+
 
         // 5. Instantiation (medCode, name, category are all guaranteed 'string')
         Medicine newMed = new Medicine
@@ -85,8 +79,8 @@ public class InventoryManager
             MedicineCode = medCode,
             Name = name,
             Category = category,
-            Price = price,
-            Quantity = qty
+            Price = price
+
         };
 
         _dbManager.AddMedicine(newMed);
@@ -107,37 +101,102 @@ public class InventoryManager
         return $"{categoryPart}-{namePart}".ToUpper();
     }
 
+    public void AddBatch()
+    {
+        Console.WriteLine("Enter the Batch details:");
+        //Some conditions might be required to protect the ID
+        Console.Write("Medicine ID: ");
+        string? rawId = Console.ReadLine();
+
+        if (!int.TryParse(rawId, out int id) || id <= 0)
+        {
+            Console.WriteLine("[INPUT ERROR] Medicine ID must be a positive number.");
+            return;
+        }
+
+        Console.Write("Batch Number: ");
+        string? batchNumber = Console.ReadLine();
+
+        if (string.IsNullOrWhiteSpace(batchNumber))
+        {
+            Console.WriteLine("[INPUT ERROR] Batch number cannot be empty.");
+            return;
+        }
+
+        Console.Write("Quantity: ");
+        string? rawQuantity = Console.ReadLine();
+        if (!int.TryParse(rawQuantity, out int quantity) || quantity <= 0)
+        {
+            Console.WriteLine("[INPUT ERROR] Quantity must be a valid positive number.");
+            return;
+        }
+
+        Console.Write("Expiry Date (YYYY-MM-DD): ");
+        string? rawExpiry = Console.ReadLine();
+
+        // 1. Force exact YYYY-MM-DD format
+        if (!DateTime.TryParseExact(rawExpiry, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime expiryDate))
+        {
+            Console.WriteLine("[INPUT ERROR] Expiry date must be in exact YYYY-MM-DD format (e.g., 2028-06-30).");
+            return;
+        }
+
+        // 2. Reject dates that are today or in the past
+        if (expiryDate <= DateTime.Today)
+        {
+            Console.WriteLine("[INPUT ERROR] Expiry date must be in the future.");
+            return;
+        }
+
+        Batch newBatch = new Batch
+        {
+            MedicineId = id,
+            BatchNumber = batchNumber,
+            Quantity = quantity,
+            ExpiryDate = expiryDate
+
+        };
+
+        _dbManager.AddBatches(newBatch);
+        Console.WriteLine("Batch added successfully.");
+
+    }
+
+
     public void SearchAndDisplayByName(string nameQuery)
     {
         try
         {
-            if(string.IsNullOrWhiteSpace(nameQuery))
+            if (string.IsNullOrWhiteSpace(nameQuery))
             {
                 Console.WriteLine("[INPUT ERROR] Search term cannot be empty.");
                 return;
             }
 
-            List<Medicine> matches = _dbManager.SearchMedicinesByName(nameQuery);
+            List<MedicineWithBatch> matches = _dbManager.SearchMedicinesByName(nameQuery);
 
-            if(matches == null || matches.Count == 0)
+            if (matches == null || matches.Count == 0)
             {
                 Console.WriteLine($"\n[No medicines found matching '{nameQuery}']\n");
                 return;
             }
 
+            
+            
+
             Console.WriteLine($"\n--- SEARCH RESULTS FOR '{nameQuery}' ({matches.Count} found) ---");
             Console.WriteLine($"{"Code",-10} {"Name",-20} {"Stock",-8} {"Price ($)",-10}");
             Console.WriteLine(new string('-', 52));
 
-            foreach(var med in matches)
+            foreach (var med in matches)
             {
-                Console.WriteLine($"{med.MedicineCode,-10} {med.Name,-20} {med.Quantity,-8} {med.Price,-10:F2}");
+                Console.WriteLine($"{med.MedicineCode,-10} {med.Name,-20} {med.TotalQuantity,-8} {med.Price,-10:F2}");
             }
             Console.WriteLine(new string('-', 52) + "\n");
-            
-            
+
+
         }
-        catch(Exception ex)
+        catch (Exception ex)
         {
             Console.WriteLine($"[Error] Search failed: {ex.Message}");
         }

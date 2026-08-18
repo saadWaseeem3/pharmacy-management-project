@@ -39,29 +39,29 @@ public class SalesManager
                 return;
             }
 
-            Medicine? med = _dbManager.SearchMedicineByCode(code);
+            MedicineWithBatch? med = _dbManager.SearchMedicineByCode(code);
             if (med == null)
             {
                 Console.WriteLine($"[Error] Medicine with code '{code}' not found.");
                 return;
             }
-
-            if (med.Quantity < quantity)
+            
+            if (med.TotalQuantity < quantity)
             {
-                Console.WriteLine($"[Error] Insufficient stock! Available: {med.Quantity}, Requested: {quantity}");
+                Console.WriteLine($"[Error] Insufficient stock! Available: {med.TotalQuantity}, Requested: {quantity}");
                 return;
             }
 
-            double totalPrice = med.Price * quantity;
+            double subTotal = med.Price * quantity;
 
             _currentCart.Add(new SaleRecord
             {
-                TransactionId = _currentTransactionId,
+                InvoiceNumber = _currentTransactionId,
                 MedicineCode = med.MedicineCode,
                 MedicineName = med.Name,
                 Quantity = quantity,
                 UnitPrice = med.Price,
-                TotalPrice = totalPrice,
+                SubTotal = subTotal,
                 SaleDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
             });
 
@@ -90,8 +90,8 @@ public class SalesManager
             double grandTotal = 0;
             foreach (var item in _currentCart)
             {
-                Console.WriteLine($"{item.MedicineCode,-10} {item.MedicineName,-20} {item.Quantity,-6} {item.UnitPrice,-10:F2} {item.TotalPrice,-10:F2}");
-                grandTotal += item.TotalPrice;
+                Console.WriteLine($"{item.MedicineCode,-10} {item.MedicineName,-20} {item.Quantity,-6} {item.UnitPrice,-10:F2} {item.SubTotal,-10:F2}");
+                grandTotal += item.SubTotal;
             }
             Console.WriteLine(new string('-', 56));
             Console.WriteLine($"{"Grand Total:",-46} {grandTotal,-10:F2}\n");
@@ -163,7 +163,7 @@ public class SalesManager
 
             foreach (var record in history)
             {
-                Console.WriteLine($"{record.TransactionId,-20} {record.MedicineCode,-8} {record.MedicineName,-15} {record.Quantity,-5} {record.TotalPrice,-8:F2} {record.SaleDate}");
+                Console.WriteLine($"{record.InvoiceNumber,-20} {record.MedicineCode,-8} {record.MedicineName,-15} {record.Quantity,-5} {record.SubTotal,-8:F2} {record.SaleDate}");
             }
             Console.WriteLine("======================================================\n");
         }

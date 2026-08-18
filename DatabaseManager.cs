@@ -21,46 +21,84 @@ public class DatabaseManager
         CreateTables();
     }
 
+    public SqliteConnection GetConnection()
+    {
+        var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+
+        using (var pragmaCommand = new SqliteCommand("PRAGMA foreign_keys = ON;", connection))
+        {
+            pragmaCommand.ExecuteNonQuery();
+        }
+
+        return connection;
+    }
+
     private bool CreateTables()
     {
-        try
-        {
-            using (var connection = new SqliteConnection(_connectionString))
-            {
-                connection.Open();
 
-                string createTableSql = @"
+        string createTableSql = @"
                 CREATE TABLE IF NOT EXISTS Medicines (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     MedicineCode TEXT UNIQUE NOT NULL,
                     Name TEXT NOT NULL,
                     Category TEXT NOT NULL,
-                    Price REAL NOT NULL,
-                    Quantity INTEGER NOT NULL
-                );";
+                    Price REAL NOT NULL
+                    
+                );
 
-                string createSalesTable = @"
                 CREATE TABLE IF NOT EXISTS Sales (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    TransactionId TEXT NOT NULL,
-                    MedicineCode TEXT NOT NULL,
+                    InvoiceNumber TEXT NOT NULL UNIQUE,
+                    SalesmanId INTEGER NOT NULL,
+                    SaleDate TEXT NOT NULL,
+                    GrandTotal REAL NOT NULL DEFAULT 0.0,
+                    FOREIGN KEY (SalesmanId) REFERENCES Salesmen(Id)
+                );
+                CREATE TABLE IF NOT EXISTS SaleDetails (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    SaleId INTEGER NOT NULL,
                     MedicineName TEXT NOT NULL,
+                    BatchId INTEGER NOT NULL,
                     Quantity INTEGER NOT NULL,
                     UnitPrice REAL NOT NULL,
-                    TotalPrice REAL NOT NULL,
-                    SaleDate TEXT NOT NULL
-                );";
+                    SubTotal REAL NOT NULL,
+                    FOREIGN KEY (SaleId) REFERENCES Sales(Id),
+                    FOREIGN KEY (BatchId) REFERENCES Batches(Id)
+                );
 
-                using (var command = new SqliteCommand(createTableSql, connection))
-                {
-                    command.ExecuteNonQuery();
-                }
+                CREATE TABLE IF NOT EXISTS Salesmen(
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    SalesmanCode TEXT NOT NULL UNIQUE,
+                    Name TEXT NOT NULL,
+                    PasswordHash TEXT NOT NULL,
+                    Role TEXT NOT NULL CHECK(Role IN ('Admin', 'Salesman')),
+                    IsActive INTEGER NOT NULL DEFAULT 1
+                    
+                );
 
-                using (var command = new SqliteCommand(createSalesTable, connection))
-                {
-                    command.ExecuteNonQuery();
-                }
+                CREATE TABLE IF NOT EXISTS Batches (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    MedicineId INTEGER NOT NULL,
+                    BatchNumber TEXT NOT NULL,
+                    Quantity INTEGER NOT NULL,
+                    ExpiryDate TEXT NOT NULL,
+
+                    FOREIGN KEY (MedicineId) REFERENCES Medicines(Id) ON DELETE RESTRICT
+                    );";
+
+        try
+        {
+
+            using (var connection = GetConnection())
+            using (var command = new SqliteCommand(createTableSql, connection))
+            {
+                command.ExecuteNonQuery();
             }
+
+
+
+
 
             return true;
         }
@@ -87,27 +125,25 @@ public class DatabaseManager
 
     public void AddMedicine(Medicine medicine)
     {
+        string insertSql = @"
+                INSERT INTO Medicines (MedicineCode, Name, Category, Price)
+                VALUES (@MedicineCode, @Name, @Category, @Price);";
+
         try
         {
-            using (var connection = new SqliteConnection(_connectionString))
+
+            using (var connection = GetConnection())
+            using (var command = new SqliteCommand(insertSql, connection))
             {
-                connection.Open();
+                command.Parameters.AddWithValue("@MedicineCode", medicine.MedicineCode);
+                command.Parameters.AddWithValue("@Name", medicine.Name);
+                command.Parameters.AddWithValue("@Category", medicine.Category);
+                command.Parameters.AddWithValue("@Price", medicine.Price);
 
-                string insertSql = @"
-                INSERT INTO Medicines (MedicineCode, Name, Category, Price, Quantity)
-                VALUES (@MedicineCode, @Name, @Category, @Price, @Quantity);";
 
-                using (var command = new SqliteCommand(insertSql, connection))
-                {
-                    command.Parameters.AddWithValue("@MedicineCode", medicine.MedicineCode);
-                    command.Parameters.AddWithValue("@Name", medicine.Name);
-                    command.Parameters.AddWithValue("@Category", medicine.Category);
-                    command.Parameters.AddWithValue("@Price", medicine.Price);
-                    command.Parameters.AddWithValue("@Quantity", medicine.Quantity);
-
-                    command.ExecuteNonQuery();
-                }
+                command.ExecuteNonQuery();
             }
+
         }
         catch (SqliteException ex)
         {
@@ -119,34 +155,70 @@ public class DatabaseManager
         }
     }
 
-    public List<Medicine> GetAllMedicines()
+    public void AddBatches(Batch batch)
     {
-        List<Medicine> medicineList = new List<Medicine>();
+
+        string insertSql = @"
+                INSERT INTO Batches (MedicineId, BatchNumber, Quantity, ExpiryDate)
+                VALUES (@MedicineId, @BatchNumber, @Quantity, @ExpiryDate);";
+
         try
         {
-            using (var connection = new SqliteConnection(_connectionString))
+
+            using (var connection = GetConnection())
+            using (var command = new SqliteCommand(insertSql, connection))
             {
-                connection.Open();
+                command.Parameters.AddWithValue("@MedicineId", batch.MedicineId);
+                command.Parameters.AddWithValue("@BatchNumber", batch.BatchNumber);
+                command.Parameters.AddWithValue("@Quantity", batch.Quantity);
+                command.Parameters.AddWithValue("@ExpiryDate", batch.ExpiryDate.ToString("yyyy-MM-dd"));
 
-                string selectSql = "SELECT Id, MedicineCode, Name, Category, Price, Quantity FROM Medicines";
 
-                using (var command = new SqliteCommand(selectSql, connection))
-                using (var reader = command.ExecuteReader())
+                command.ExecuteNonQuery();
+            }
+
+        }
+        catch (SqliteException ex)
+        {
+            Console.WriteLine($"[Database Error]: Failed to add batch. Details: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[System Error]: An unexpected error occurred: {ex.Message}");
+        }
+    }
+
+    public List<MedicineWithBatch> GetAllMedicines()
+    {
+        List<MedicineWithBatch> medicineList = new List<MedicineWithBatch>();
+
+        string selectSql = @"
+        SELECT 
+        m.Id, m.MedicineCode, m.Name, m.Category, m.Price,
+        COALESCE(SUM(b.Quantity), 0) AS TOTAL_QUANTITY
+        FROM Medicines m
+        LEFT JOIN Batches b ON m.Id = b.MedicineId
+        GROUP BY m.Id, m.MedicineCode, m.Name, m.Category, m.Price;";
+        try
+        {
+            using (var connection = GetConnection())
+            using (var command = new SqliteCommand(selectSql, connection))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
                 {
-                    while (reader.Read())
+                    medicineList.Add(new MedicineWithBatch
                     {
-                        medicineList.Add(new Medicine
-                        {
-                            Id = reader.GetInt32(0),
-                            MedicineCode = reader.GetString(1),
-                            Name = reader.GetString(2),
-                            Category = reader.GetString(3),
-                            Price = reader.GetDouble(4),
-                            Quantity = reader.GetInt32(5)
-                        });
-                    }
+                        MedicineId = reader.GetInt32(0),
+                        MedicineCode = reader.GetString(1),
+                        Name = reader.GetString(2),
+                        Category = reader.GetString(3),
+                        Price = reader.GetDouble(4),
+                        TotalQuantity = reader.GetInt32(5)
+                    });
                 }
             }
+
         }
         catch (SqliteException ex)
         {
@@ -160,44 +232,46 @@ public class DatabaseManager
         return medicineList;
     }
 
-    public List<Medicine> SearchMedicinesByName(string searchTerm)
+    public List<MedicineWithBatch> SearchMedicinesByName(string searchTerm)
     {
-        List<Medicine> results = new List<Medicine>();
+        List<MedicineWithBatch> results = new List<MedicineWithBatch>();
         if (string.IsNullOrWhiteSpace(searchTerm))
             return results;
 
         string querySql = @"
-            SELECT Id, MedicineCode, Name, Category, Price, Quantity
-            FROM Medicines
-            WHERE Name LIKE @Search OR Category LIKE @Search;";
+            SELECT 
+            m.Id, m.MedicineCode, m.Name, m.Category, m.Price,
+            COALESCE(SUM(b.Quantity), 0) AS TOTAL_QUANTITY
+            FROM Medicines m
+            LEFT JOIN BATCHES b ON m.Id = b.MedicineId
+            WHERE m.Name LIKE @Search OR m.Category LIKE @Search
+            GROUP BY m.Id, m.MedicineCode, m.Name, m.Category, m.Price;";
 
         try
         {
-            using (var connection = new SqliteConnection(_connectionString))
+
+            using (var connection = GetConnection())
+            using (var command = new SqliteCommand(querySql, connection))
             {
-                connection.Open();
+                command.Parameters.AddWithValue("@Search", $"%{searchTerm}%");
 
-                using (var command = new SqliteCommand(querySql, connection))
+                using (var reader = command.ExecuteReader())
                 {
-                    command.Parameters.AddWithValue("@Search", $"%{searchTerm}%");
-
-                    using (var reader = command.ExecuteReader())
+                    while (reader.Read())
                     {
-                        while (reader.Read())
+                        results.Add(new MedicineWithBatch
                         {
-                            results.Add(new Medicine
-                            {
-                                Id = reader.GetInt32(0),
-                                MedicineCode = reader.GetString(1),
-                                Name = reader.GetString(2),
-                                Category = reader.GetString(3),
-                                Price = reader.GetDouble(4),
-                                Quantity = reader.GetInt32(5)
-                            });
-                        }
+                            MedicineId = reader.GetInt32(0),
+                            MedicineCode = reader.GetString(1),
+                            Name = reader.GetString(2),
+                            Category = reader.GetString(3),
+                            Price = reader.GetDouble(4),
+                            TotalQuantity = reader.GetInt32(5)
+                        });
                     }
                 }
             }
+
         }
         catch (SqliteException ex)
         {
@@ -211,43 +285,45 @@ public class DatabaseManager
         return results;
     }
 
-    public Medicine? SearchMedicineByCode(string? code)
+    public MedicineWithBatch? SearchMedicineByCode(string? code)
     {
         if (string.IsNullOrWhiteSpace(code))
             return null;
 
         string querySql = @"
-            SELECT Id, MedicineCode, Name, Category, Price, Quantity
-            FROM Medicines
-            WHERE UPPER(MedicineCode) = @code;";
+            SELECT
+            m.Id, MedicineCode, m.Name, m.Category, m.Price,
+            COALESCE(SUM(b.Quantity), 0) AS TOTAL_QUANTITY
+            FROM Medicines m
+            LEFT JOIN BATCHES b ON m.Id = b.MedicineId
+            WHERE m.MedicineCode = @code
+            GROUP BY m.Id, m.MedicineCode, m.Name, m.Category, m.Price;";
 
         try
         {
-            using (var connection = new SqliteConnection(_connectionString))
+            using (var connection = GetConnection())
+            using (var command = new SqliteCommand(querySql, connection))
             {
-                connection.Open();
+                command.Parameters.AddWithValue("@code", code.ToUpper());
 
-                using (var command = new SqliteCommand(querySql, connection))
+                using (var reader = command.ExecuteReader())
                 {
-                    command.Parameters.AddWithValue("@code", code.ToUpper());
-
-                    using (var reader = command.ExecuteReader())
+                    if (reader.Read())
                     {
-                        if (reader.Read())
+                        return new MedicineWithBatch
                         {
-                            return new Medicine
-                            {
-                                Id = reader.GetInt32(0),
-                                MedicineCode = reader.GetString(1),
-                                Name = reader.GetString(2),
-                                Category = reader.GetString(3),
-                                Price = reader.GetDouble(4),
-                                Quantity = reader.GetInt32(5)
-                            };
-                        }
+                            MedicineId = reader.GetInt32(0),
+                            MedicineCode = reader.GetString(1),
+                            Name = reader.GetString(2),
+                            Category = reader.GetString(3),
+                            Price = reader.GetDouble(4),
+                            TotalQuantity = reader.GetInt32(5)
+
+                        };
                     }
                 }
             }
+
         }
         catch (SqliteException ex)
         {
@@ -270,107 +346,160 @@ public class DatabaseManager
     /// Deducts inventory stock and logs sales history together.
     /// If any line item fails, the entire transaction rolls back.
     /// </summary>
-    public bool AddSaleRecords(List<SaleRecord> records)
+    public bool ExecuteSale(Sale sale)
     {
-        if (records == null || records.Count == 0)
+        if (sale == null || sale.Items == null || sale.Items.Count == 0)
             return false;
 
-        using (var connection = new SqliteConnection(_connectionString))
+
+        using (var connection = GetConnection())
+        using (var transaction = connection.BeginTransaction())
         {
-            connection.Open();
-
-            using (var transaction = connection.BeginTransaction())
+            try
             {
-                try
+
+                //Insert transaction header into Sales table
+                string insertSaleSql = @"
+                        INSERT INTO Sales (InvoiceNumber, SalesmanId, SaleDate, GrandTotal)
+                        VALUES (@InvoiceNumber, @SalesmanId, @SaleDate, @GrandTotal);
+                        SELECT last_insert_rowid();";
+
+
+                int generatedSaleId;
+                using (var saleCmd = new SqliteCommand(insertSaleSql, connection, transaction))
                 {
-                    string updateStockSql = @"
-                        UPDATE Medicines 
+                    saleCmd.Parameters.AddWithValue("@InvoiceNumber", sale.InvoiceNumber);
+                    saleCmd.Parameters.AddWithValue("@SalesmanId", sale.SalesmanId);
+                    saleCmd.Parameters.AddWithValue("@SaleDate", sale.SaleDate);
+                    saleCmd.Parameters.AddWithValue("@GrandTotal", sale.GrandTotal);
+
+                    //Execute query and extract auto-generated Sales.Id
+                    generatedSaleId = Convert.ToInt32(saleCmd.ExecuteScalar());
+                }
+
+                string updateStockSql = @"
+                        UPDATE Batches 
                         SET Quantity = Quantity - @Quantity 
-                        WHERE MedicineCode = @MedicineCode AND Quantity >= @Quantity;";
+                        WHERE Id = @BatchId AND Quantity >= @Quantity;";
 
-                    string insertSaleSql = @"
-                        INSERT INTO Sales (TransactionId, MedicineCode, MedicineName, Quantity, UnitPrice, TotalPrice, SaleDate)
-                        VALUES (@TransactionId, @MedicineCode, @MedicineName, @Quantity, @UnitPrice, @TotalPrice, @SaleDate);";
+                string insertDetailSql = @"
+                        INSERT INTO SaleDetails (SaleId, BatchId, MedicineName, Quantity, UnitPrice, SubTotal)
+                        VALUES (@SaleId, @BatchId, @MedicineName, @Quantity, @UnitPrice, @SubTotal);";
 
-                    foreach (var record in records)
+                // 2. Process each line item (SaleDetail) in the transaction
+                foreach (var item in sale.Items)
+                {
+                    using (var updateCmd = new SqliteCommand(updateStockSql, connection, transaction))
                     {
-                        // 1. Deduct stock from Medicines table
-                        using (var updateCmd = new SqliteCommand(updateStockSql, connection, transaction))
-                        {
-                            updateCmd.Parameters.AddWithValue("@Quantity", record.Quantity);
-                            updateCmd.Parameters.AddWithValue("@MedicineCode", record.MedicineCode);
+                        updateCmd.Parameters.AddWithValue("@BatchId", item.BatchId);
+                        updateCmd.Parameters.AddWithValue("@Quantity", item.Quantity);
 
-                            int rowsAffected = updateCmd.ExecuteNonQuery();
-                            if (rowsAffected == 0)
-                            {
-                                throw new InvalidOperationException($"Stock deduction failed for {record.MedicineName} (Code: {record.MedicineCode}). Insufficient inventory.");
-                            }
+                        int rowsAffected = updateCmd.ExecuteNonQuery();
+                        if(rowsAffected == 0)
+                        {
+                            throw new InvalidOperationException($"Stock deduction failed for {item.MedicineName} (Batch ID: {item.BatchId}). Insufficient Inventory.");
                         }
 
-                        // 2. Insert sales history snapshot
-                        using (var insertCmd = new SqliteCommand(insertSaleSql, connection, transaction))
-                        {
-                            insertCmd.Parameters.AddWithValue("@TransactionId", record.TransactionId);
-                            insertCmd.Parameters.AddWithValue("@MedicineCode", record.MedicineCode);
-                            insertCmd.Parameters.AddWithValue("@MedicineName", record.MedicineName);
-                            insertCmd.Parameters.AddWithValue("@Quantity", record.Quantity);
-                            insertCmd.Parameters.AddWithValue("@UnitPrice", record.UnitPrice);
-                            insertCmd.Parameters.AddWithValue("@TotalPrice", record.TotalPrice);
-                            insertCmd.Parameters.AddWithValue("@SaleDate", record.SaleDate);
 
-                            insertCmd.ExecuteNonQuery();
-                        }
+
                     }
 
-                    transaction.Commit();
-                    return true;
+                    using (var detailCmd = new SqliteCommand(insertDetailSql, connection, transaction))
+                    {
+                        
+                        detailCmd.Parameters.AddWithValue("@SaleId", generatedSaleId);
+                        detailCmd.Parameters.AddWithValue("@BatchId", item.BatchId);
+                        detailCmd.Parameters.AddWithValue("@MedicineName", item.MedicineName);
+                        detailCmd.Parameters.AddWithValue("@Quantity", item.Quantity);
+                        detailCmd.Parameters.AddWithValue("@UnitPrice", item.UnitPrice);
+                        detailCmd.Parameters.AddWithValue("@TotalPrice", item.SubTotal);
+                        
+
+                        detailCmd.ExecuteNonQuery();
+                    }
+
                 }
-                catch (Exception ex)
-                {
-                    transaction.Rollback();
-                    Console.WriteLine($"[TRANSACTION ERROR] Checkout failed and was rolled back: {ex.Message}");
-                    return false;
-                }
+                transaction.Commit();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                transaction.Rollback();
+                Console.WriteLine($"[TRANSACTION ERROR] Checkout failed and was rolled back: {ex.Message}");
+                return false;
             }
         }
     }
 
+
     public List<SaleRecord> GetSaleHistory()
     {
-        List<SaleRecord> history = new List<SaleRecord>();
+        var history = new List<SaleRecord>();
         string querySql = @"
-            SELECT Id, TransactionId, MedicineCode, MedicineName, Quantity, UnitPrice, TotalPrice, SaleDate
-            FROM Sales
-            ORDER BY Id DESC;";
+            SELECT
+            s.Id AS SaleId,
+            s.InvoiceNumber, 
+            sm.SalesmanCode,
+            sd.BatchId,
+            b.BatchNumber,
+            m.MedicineCode,
+            sd.MedicineName, 
+            sd.Quantity, 
+            sd.UnitPrice, 
+            sd.SubTotal, 
+            s.SaleDate
+            FROM Sales s
+            INNER JOIN Salesman sm ON s.SalesmanId = sm.Id
+            INNER JOIN SaleDetails sd ON s.Id = sd.SaleId
+            INNER JOIN BATCHES b ON sd.BatchId = b.Id
+            INNER JOIN Medicines m ON b.MedicineId = m.Id
+            ORDER BY s.Id DESC;";
 
         try
         {
-            using (var connection = new SqliteConnection(_connectionString))
+            using var connection = GetConnection();
+            using var command = new SqliteCommand(querySql, connection);
+            using var reader = command.ExecuteReader();
+
+            int saleIdOrdinal = reader.GetOrdinal("SaleId");
+            int invoiceNumberOrdinal = reader.GetOrdinal("InvoiceNumber");
+            int salesmanCodeOrdinal = reader.GetOrdinal("SalesmanCode");
+            int batchIdOrdinal = reader.GetOrdinal("BatchId");
+            int batchNumberOrdinal = reader.GetOrdinal("BatchNumber");
+            int medicineCodeOrdinal = reader.GetOrdinal("MedicineCode");
+            int medicineNameOrdinal = reader.GetOrdinal("MedicineName");
+            int quantityOrdinal = reader.GetOrdinal("Quantity");
+            int unitPriceOrdinal = reader.GetOrdinal("UnitPrice");
+            int subTotalOrdinal = reader.GetOrdinal("SubTotal");
+            int saleDateOrdinal = reader.GetOrdinal("SaleDate");
+
+            while (reader.Read())
             {
-                connection.Open();
-                using (var command = new SqliteCommand(querySql, connection))
-                using (var reader = command.ExecuteReader())
+                history.Add(new SaleRecord
                 {
-                    while (reader.Read())
-                    {
-                        history.Add(new SaleRecord
-                        {
-                            Id = reader.GetInt32(0),
-                            TransactionId = reader.GetString(1),
-                            MedicineCode = reader.GetString(2),
-                            MedicineName = reader.GetString(3),
-                            Quantity = reader.GetInt32(4),
-                            UnitPrice = reader.GetDouble(5),
-                            TotalPrice = reader.GetDouble(6),
-                            SaleDate = reader.GetString(7)
-                        });
-                    }
-                }
+                    SaleId = reader.GetInt32(saleIdOrdinal),
+                    InvoiceNumber = reader.GetString(invoiceNumberOrdinal),
+                    SalesmanCode = reader.GetString(salesmanCodeOrdinal),
+                    BatchId = reader.GetInt32(batchIdOrdinal),
+                    BatchNumber = reader.GetString(batchNumberOrdinal),
+                    MedicineCode = reader.GetString(medicineCodeOrdinal),
+                    MedicineName = reader.GetString(medicineNameOrdinal),
+                    Quantity = reader.GetInt32(quantityOrdinal),
+                    UnitPrice = reader.GetDouble(unitPriceOrdinal),
+                    SubTotal = reader.GetDouble(subTotalOrdinal),
+                    SaleDate = reader.GetString(saleDateOrdinal)
+                });
             }
+
+
+        }
+        catch (SqliteException ex)
+        {
+            Console.WriteLine($"[DATABASE ERROR] Failed to fetch sales history: {ex.Message}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[DATABASE ERROR] Failed to fetch sales history: {ex.Message}");
+            Console.WriteLine($"[GENERAL ERROR] An unexpected error occurred: {ex.Message}");
         }
 
         return history;
