@@ -3,6 +3,7 @@ using Pharmacy.Data;
 using Pharmacy.Inventory;
 using Pharmacy.Models;
 using Pharmacy.Sales;
+using Pharmacy.Staff;
 
 try
 {
@@ -15,6 +16,8 @@ try
     dbManager.InitializeDatabase();
 
     InventoryManager inventory = new InventoryManager(dbManager);
+
+    StaffManager staff = new StaffManager(dbManager);
 
     // --- SALESMAN LOGIN PROMPT ---
     Console.Write("\nEnter Salesman ID (Press Enter for Default [1]): ");
@@ -34,7 +37,8 @@ try
             Console.WriteLine("\n[MAIN MENU]");
             Console.WriteLine("1. Sales / POS");
             Console.WriteLine("2. Inventory");
-            Console.WriteLine("3. Exit");
+            Console.WriteLine("3.Staff Management");
+            Console.WriteLine("4. Exit");
             Console.Write("Enter choice: ");
 
             string? input = Console.ReadLine();
@@ -48,6 +52,9 @@ try
                     RunInventoryMenu(inventory);
                     break;
                 case "3":
+                    RunStaffMenu(staff);
+                    break;
+                case "4":
                     appRunning = false;
                     Console.WriteLine("Exiting application. Goodbye!");
                     break;
@@ -236,6 +243,49 @@ void RunInventoryMenu(InventoryManager inventory)
         catch (Exception ex)
         {
             Console.WriteLine($"[Inventory Menu Error]: {ex.Message}");
+        }
+    }
+}
+
+// ==========================================
+// STAFF SUB-MENU
+// ==========================================
+
+void RunStaffMenu(StaffManager staff)
+{
+    bool inStaffMenu = true;
+
+    while (inStaffMenu)
+    {
+        try
+        {
+            Console.WriteLine("\n--- [STAFF MANAGEMENT] ---");
+            Console.WriteLine("1. Register New Staff Member");
+            Console.WriteLine("2. View All Staff Members");
+            Console.WriteLine("3. Return to Main Menu");
+            Console.Write("Select an option: ");
+
+            string? choice = Console.ReadLine();
+
+            switch (choice)
+            {
+                case "1":
+                    staff.RegisterNewStaff();
+                    break;
+                case "2":
+                    staff.DisplayAllStaff();
+                    break;
+                case "3":
+                    inStaffMenu = false;
+                    break;
+                default:
+                    Console.WriteLine("Invalid option. Enter 1, 2, or 3.");
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Staff Section Error]: {ex.Message}");
         }
     }
 }

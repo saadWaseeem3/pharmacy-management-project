@@ -291,14 +291,20 @@ public class DatabaseManager
             return null;
 
         string querySql = @"
-            SELECT
-            m.Id, MedicineCode, m.Name, m.Category, m.Price,
-            COALESCE(SUM(b.Quantity), 0) AS TOTAL_QUANTITY
-            FROM Medicines m
-            LEFT JOIN BATCHES b ON m.Id = b.MedicineId
-            WHERE m.MedicineCode = @code
-            GROUP BY m.Id, m.MedicineCode, m.Name, m.Category, m.Price;";
-
+            SELECT 
+            m.Id AS MedicineId,
+            m.MedicineCode,
+            m.Name,
+            m.Category,
+            m.Price,
+            b.Id AS BatchId,
+            b.BatchNumber,
+            b.Quantity AS TotalQuantity
+        FROM Medicines m
+        INNER JOIN Batches b ON m.Id = b.MedicineId
+        WHERE m.MedicineCode = @code AND b.Quantity > 0
+        ORDER BY b.Id ASC
+        LIMIT 1;";
         try
         {
             using (var connection = GetConnection())
@@ -312,12 +318,13 @@ public class DatabaseManager
                     {
                         return new MedicineWithBatch
                         {
-                            MedicineId = reader.GetInt32(0),
-                            MedicineCode = reader.GetString(1),
-                            Name = reader.GetString(2),
-                            Category = reader.GetString(3),
-                            Price = reader.GetDouble(4),
-                            TotalQuantity = reader.GetInt32(5)
+                            MedicineId = reader.GetInt32(reader.GetOrdinal("MedicineId")),
+                            MedicineCode = reader.GetString(reader.GetOrdinal("MedicineCode")),
+                            Name = reader.GetString(reader.GetOrdinal("Name")),
+                            Price = reader.GetDouble(reader.GetOrdinal("Price")),
+                            BatchId = reader.GetInt32(reader.GetOrdinal("BatchId")),
+                            BatchNumber = reader.GetString(reader.GetOrdinal("BatchNumber")),
+                            TotalQuantity = reader.GetInt32(reader.GetOrdinal("TotalQuantity"))
 
                         };
                     }
@@ -341,11 +348,7 @@ public class DatabaseManager
     // SALES & CHECKOUT OPERATIONS
     // ==========================================
 
-    /// <summary>
-    /// Executes an atomic batch transaction for cart checkout:
-    /// Deducts inventory stock and logs sales history together.
-    /// If any line item fails, the entire transaction rolls back.
-    /// </summary>
+    
     public bool ExecuteSale(Sale sale)
     {
         if (sale == null || sale.Items == null || sale.Items.Count == 0)
@@ -395,7 +398,7 @@ public class DatabaseManager
                         updateCmd.Parameters.AddWithValue("@Quantity", item.Quantity);
 
                         int rowsAffected = updateCmd.ExecuteNonQuery();
-                        if(rowsAffected == 0)
+                        if (rowsAffected == 0)
                         {
                             throw new InvalidOperationException($"Stock deduction failed for {item.MedicineName} (Batch ID: {item.BatchId}). Insufficient Inventory.");
                         }
@@ -406,14 +409,14 @@ public class DatabaseManager
 
                     using (var detailCmd = new SqliteCommand(insertDetailSql, connection, transaction))
                     {
-                        
+
                         detailCmd.Parameters.AddWithValue("@SaleId", generatedSaleId);
                         detailCmd.Parameters.AddWithValue("@BatchId", item.BatchId);
                         detailCmd.Parameters.AddWithValue("@MedicineName", item.MedicineName);
                         detailCmd.Parameters.AddWithValue("@Quantity", item.Quantity);
                         detailCmd.Parameters.AddWithValue("@UnitPrice", item.UnitPrice);
                         detailCmd.Parameters.AddWithValue("@TotalPrice", item.SubTotal);
-                        
+
 
                         detailCmd.ExecuteNonQuery();
                     }
@@ -503,5 +506,76 @@ public class DatabaseManager
         }
 
         return history;
+    }
+
+    //========================
+    //STAFF MANAGEMENT
+    //========================
+
+    public void AddSalesman(Salesman salesman)
+    {
+        string insertSql = @"
+        INSERT INTO Salesmen (SalesmanCode, Name, PasswordHash, Role, IsActive)
+        VALUES (@SalesmanCode, @Name, @PasswordHash, @Role, @IsActive);";
+
+        try
+        {
+            using var connection = GetConnection();
+            using var command = new SqliteCommand(insertSql, connection);
+            command.Parameters.AddWithValue("@SalesmanCode", salesman.SalesmanCode);
+            command.Parameters.AddWithValue("@Name", salesman.Name);
+            command.Parameters.AddWithValue("@PasswordHash", salesman.PasswordHash);
+            command.Parameters.AddWithValue("@Role", salesman.Role);
+            command.Parameters.AddWithValue("@IsActive", salesman.IsActive);
+
+            command.ExecuteNonQuery();
+        }
+        catch (SqliteException ex)
+        {
+            Console.WriteLine($"[DATABASE ERROR] Failed to add salesman: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GENERAL ERROR] An unexpected error occurred: {ex.Message}");
+        }
+    }
+
+    public List<Salesman> GetSalesmanList()
+    {
+        List<Salesman> salesmanList = new();
+
+        string querySql = @"
+        SELECT Id, SalesmanCode, Name, PasswordHash, Role, IsActive
+        FROM Salesmen;";
+
+        try
+        {
+            using var connection = GetConnection();
+            using var command = new SqliteCommand(querySql, connection);
+            using var reader = command.ExecuteReader();
+
+            while (reader.Read())
+            {
+                salesmanList.Add(new Salesman
+                {
+                    Id = reader.GetInt32(0),
+                    SalesmanCode = reader.GetString(1),
+                    Name = reader.GetString(2),
+                    PasswordHash = reader.GetString(3),
+                    Role = reader.GetString(4),
+                    IsActive = reader.GetBoolean(5)
+                });
+            }
+        }
+        catch (SqliteException ex)
+        {
+            Console.WriteLine($"[DATABASE ERROR] Failed to fetch salesman list: {ex.Message}");
+        }
+        catch (Exception ex)
+        {    
+            Console.WriteLine($"[GENERAL ERROR] An unexpected error occurred: {ex.Message}");
+        }
+
+        return salesmanList;
     }
 }

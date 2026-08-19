@@ -9,18 +9,26 @@ namespace Pharmacy.Sales;
 public class SalesManager
 {
     private readonly DatabaseManager _dbManager;
-    private readonly List<SaleRecord> _currentCart = new List<SaleRecord>();
-    private string _currentTransactionId = string.Empty;
+    private Sale _activeSale;
+    private readonly int _currentSalesmanId;
 
-    public SalesManager(DatabaseManager dbManager)
+    public SalesManager(DatabaseManager dbManager, int currentSalesmanId)
     {
         _dbManager = dbManager;
-        GenerateNewTransactionId();
+        _currentSalesmanId = currentSalesmanId;
+        _activeSale = CreateNewSale();
     }
 
-    private void GenerateNewTransactionId()
+    private Sale CreateNewSale()
     {
-        _currentTransactionId = "TXN-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        return new Sale
+        {
+            InvoiceNumber = "TXN-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"),
+            SalesmanId = _currentSalesmanId,
+            SaleDate = DateTime.Now,
+            Items = new List<SaleDetail>()
+        };
+        
     }
 
     public void AddToCart(string code, int quantity)
@@ -54,15 +62,14 @@ public class SalesManager
 
             double subTotal = med.Price * quantity;
 
-            _currentCart.Add(new SaleRecord
+            _activeSale.Items.Add(new SaleDetail
             {
-                InvoiceNumber = _currentTransactionId,
+                BatchId = med.BatchId,
                 MedicineCode = med.MedicineCode,
                 MedicineName = med.Name,
                 Quantity = quantity,
                 UnitPrice = med.Price,
-                SubTotal = subTotal,
-                SaleDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                
             });
 
             Console.WriteLine($"[Success] Added {quantity}x {med.Name} to cart.");
@@ -77,22 +84,23 @@ public class SalesManager
     {
         try
         {
-            if (_currentCart.Count == 0)
+            if (_activeSale.Items.Count == 0)
             {
                 Console.WriteLine("\n[Cart is currently empty.]");
                 return;
             }
 
-            Console.WriteLine($"\n--- CURRENT CART ({_currentTransactionId}) ---");
+            Console.WriteLine($"\n--- CURRENT CART ({_activeSale.InvoiceNumber}) ---");
             Console.WriteLine($"{"Code",-10} {"Name",-20} {"Qty",-6} {"Price",-10} {"Total",-10}");
             Console.WriteLine(new string('-', 56));
 
             double grandTotal = 0;
-            foreach (var item in _currentCart)
+            foreach (var item in _activeSale.Items)
             {
                 Console.WriteLine($"{item.MedicineCode,-10} {item.MedicineName,-20} {item.Quantity,-6} {item.UnitPrice,-10:F2} {item.SubTotal,-10:F2}");
-                grandTotal += item.SubTotal;
+                
             }
+            _activeSale.GrandTotal = _activeSale.Items.Sum(i => i.SubTotal);
             Console.WriteLine(new string('-', 56));
             Console.WriteLine($"{"Grand Total:",-46} {grandTotal,-10:F2}\n");
         }
@@ -106,22 +114,28 @@ public class SalesManager
     {
         try
         {
-            if (_currentCart.Count == 0)
+            if (_activeSale.Items.Count == 0)
             {
                 Console.WriteLine("[Error] Cannot checkout an empty cart.");
                 return false;
             }
 
-            bool success = _dbManager.AddSaleRecords(_currentCart);
+            //Set final timestamp for the Sale
+            _activeSale.SaleDate = DateTime.Now;
+
+            // Calculate grand total
+            _activeSale.GrandTotal = _activeSale.Items.Sum(i => i.SubTotal);
+
+            bool success = _dbManager.ExecuteSale(_activeSale);
             if (success)
             {
                 Console.WriteLine($"\n[SUCCESS] Checkout completed successfully!");
-                Console.WriteLine($"Transaction ID: {_currentTransactionId}");
+                Console.WriteLine($"Transaction ID: {_activeSale.InvoiceNumber}");
                 DisplayCart();
 
                 // Clear cart and reset Transaction ID for the next customer
-                _currentCart.Clear();
-                GenerateNewTransactionId();
+                _activeSale.Items.Clear();
+                
                 return true;
             }
 
@@ -140,8 +154,7 @@ public class SalesManager
 
     public void ClearCart()
     {
-        _currentCart.Clear();
-        GenerateNewTransactionId();
+        _activeSale = CreateNewSale();
         Console.WriteLine("[POS] Active cart session cleared.");
     }
 

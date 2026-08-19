@@ -2,7 +2,7 @@ namespace Pharmacy.Models;
 
 public class Salesman
 {
-    public int SalesmanId { get; set; }
+    public int Id { get; set; }
     public string SalesmanCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;

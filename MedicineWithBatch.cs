@@ -8,5 +8,7 @@ namespace Pharmacy.Models
         public string Category { get; set; } = string.Empty;
         public double Price { get; set; }
         public int TotalQuantity { get; set; }
+        public int BatchId { get; set; }
+        public string BatchNumber { get; set; } = string.Empty;
     }
 }
