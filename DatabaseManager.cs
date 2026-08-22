@@ -415,7 +415,7 @@ public class DatabaseManager
                         detailCmd.Parameters.AddWithValue("@MedicineName", item.MedicineName);
                         detailCmd.Parameters.AddWithValue("@Quantity", item.Quantity);
                         detailCmd.Parameters.AddWithValue("@UnitPrice", item.UnitPrice);
-                        detailCmd.Parameters.AddWithValue("@TotalPrice", item.SubTotal);
+                        detailCmd.Parameters.AddWithValue("@SubTotal", item.SubTotal);
 
 
                         detailCmd.ExecuteNonQuery();
@@ -452,7 +452,7 @@ public class DatabaseManager
             sd.SubTotal, 
             s.SaleDate
             FROM Sales s
-            INNER JOIN Salesman sm ON s.SalesmanId = sm.Id
+            INNER JOIN Salesmen sm ON s.SalesmanId = sm.Id
             INNER JOIN SaleDetails sd ON s.Id = sd.SaleId
             INNER JOIN BATCHES b ON sd.BatchId = b.Id
             INNER JOIN Medicines m ON b.MedicineId = m.Id

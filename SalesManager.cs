@@ -94,7 +94,7 @@ public class SalesManager
             Console.WriteLine($"{"Code",-10} {"Name",-20} {"Qty",-6} {"Price",-10} {"Total",-10}");
             Console.WriteLine(new string('-', 56));
 
-            double grandTotal = 0;
+            
             foreach (var item in _activeSale.Items)
             {
                 Console.WriteLine($"{item.MedicineCode,-10} {item.MedicineName,-20} {item.Quantity,-6} {item.UnitPrice,-10:F2} {item.SubTotal,-10:F2}");
@@ -102,7 +102,7 @@ public class SalesManager
             }
             _activeSale.GrandTotal = _activeSale.Items.Sum(i => i.SubTotal);
             Console.WriteLine(new string('-', 56));
-            Console.WriteLine($"{"Grand Total:",-46} {grandTotal,-10:F2}\n");
+            Console.WriteLine($"{"Grand Total:",-46} {_activeSale.GrandTotal,-10:F2}\n");
         }
         catch (Exception ex)
         {
