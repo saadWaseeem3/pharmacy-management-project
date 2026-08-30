@@ -43,7 +43,11 @@ public class DatabaseManager
                     MedicineCode TEXT UNIQUE NOT NULL,
                     Name TEXT NOT NULL,
                     Category TEXT NOT NULL,
-                    Price REAL NOT NULL
+                    Price REAL NOT NULL,
+                    CompanyId INTEGER NOT NULL DEFAULT 1,
+                    MinReorderLevel INTEGER NOT NULL DEFAULT 10,
+                    ReorderQuantity INTEGER NOT NULL DEFAULT 50,
+                    FOREIGN KEY (CompanyId) REFERENCES Companies(Id)
                     
                 );
 
@@ -77,6 +81,12 @@ public class DatabaseManager
                     
                 );
 
+                CREATE TABLE IF NOT EXISTS Companies (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Name TEXT NOT NULL,
+                    Contact TEXT NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS Batches (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     MedicineId INTEGER NOT NULL,
@@ -86,6 +96,8 @@ public class DatabaseManager
 
                     FOREIGN KEY (MedicineId) REFERENCES Medicines(Id) ON DELETE RESTRICT
                     );";
+
+
 
         try
         {
@@ -181,6 +193,36 @@ public class DatabaseManager
         catch (SqliteException ex)
         {
             Console.WriteLine($"[Database Error]: Failed to add batch. Details: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[System Error]: An unexpected error occurred: {ex.Message}");
+        }
+    }
+
+    public void AddCompanies(Company company)
+    {
+
+        string insertSql = @"
+                INSERT INTO Companies (Name, Contact)
+                VALUES (@Name, @Contact);";
+
+        try
+        {
+
+            using (var connection = GetConnection())
+            using (var command = new SqliteCommand(insertSql, connection))
+            {
+                command.Parameters.AddWithValue("@Name", company.Name);
+                command.Parameters.AddWithValue("@Contact", company.Contact);
+
+
+                command.ExecuteNonQuery();
+            }
+        }
+        catch (SqliteException ex)
+        {
+            Console.WriteLine($"[Database Error]: Failed to add company. Details: {ex.Message}");
         }
         catch (Exception ex)
         {
@@ -299,9 +341,11 @@ public class DatabaseManager
             m.Price,
             b.Id AS BatchId,
             b.BatchNumber,
-            b.Quantity AS TotalQuantity
+            b.Quantity AS TotalQuantity,
+            c.Name AS CompanyName
         FROM Medicines m
         INNER JOIN Batches b ON m.Id = b.MedicineId
+        INNER JOIN Companies c ON m.CompanyId = c.Id
         WHERE m.MedicineCode = @code AND b.Quantity > 0
         ORDER BY b.Id ASC
         LIMIT 1;";
@@ -344,11 +388,75 @@ public class DatabaseManager
         return null;
     }
 
+    public List<ReorderDTO> GetReorderList()
+    {
+        string querySql = @"
+        SELECT 
+            c.Name AS CompanyName,
+            m.MedicineCode,
+            m.Name AS MedicineName,
+            m.MinReorderLevel,
+            m.ReorderQuantity,
+            COALESCE(SUM(b.Quantity), 0) AS CurrentStock
+        FROM Medicines m
+        INNER JOIN Companies c ON m.CompanyId = c.Id
+        LEFT JOIN Batches b ON m.Id = b.MedicineId AND b.ExpiryDate >= DATE('now')
+        GROUP BY m.Id, c.Name, m.MedicineCode, m.Name, m.MinReorderLevel, m.ReorderQuantity
+        HAVING CurrentStock <= m.MinReorderLevel
+        ORDER BY c.Name ASC, m.Name ASC;";
+
+        List<ReorderDTO> reorderList = new List<ReorderDTO>();
+
+        try
+        {
+            using (var connection = GetConnection())
+            {
+                connection.Open(); // Fix 1: Ensure connection is explicitly opened
+
+                using (var command = new SqliteCommand(querySql, connection))
+                using (var reader = command.ExecuteReader())
+                {
+                    // Fix 2: Cache column ordinals ONCE outside the read loop
+                    int colCompany = reader.GetOrdinal("CompanyName");
+                    int colCode = reader.GetOrdinal("MedicineCode");
+                    int colName = reader.GetOrdinal("MedicineName");
+                    int colMin = reader.GetOrdinal("MinReorderLevel");
+                    int colQty = reader.GetOrdinal("ReorderQuantity");
+                    int colStock = reader.GetOrdinal("CurrentStock");
+
+                    while (reader.Read())
+                    {
+                        reorderList.Add(new ReorderDTO
+                        {
+                            CompanyName = reader.GetString(colCompany),
+                            MedicineCode = reader.GetString(colCode),
+                            MedicineName = reader.GetString(colName),
+                            MinReorderLevel = reader.GetInt32(colMin),
+                            ReorderQuantity = reader.GetInt32(colQty),
+                            CurrentStock = reader.GetInt32(colStock)
+                        });
+                    }
+                }
+            }
+        }
+        catch (SqliteException ex)
+        {
+            Console.WriteLine($"[DATABASE ERROR] Reorder lookup failed: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SYSTEM ERROR] Unexpected failure during lookup: {ex.Message}");
+        }
+
+        return reorderList;
+    }
+
+
     // ==========================================
     // SALES & CHECKOUT OPERATIONS
     // ==========================================
 
-    
+
     public bool ExecuteSale(Sale sale)
     {
         if (sale == null || sale.Items == null || sale.Items.Count == 0)
@@ -363,9 +471,9 @@ public class DatabaseManager
 
                 //Insert transaction header into Sales table
                 string insertSaleSql = @"
-                        INSERT INTO Sales (InvoiceNumber, SalesmanId, SaleDate, GrandTotal)
-                        VALUES (@InvoiceNumber, @SalesmanId, @SaleDate, @GrandTotal);
-                        SELECT last_insert_rowid();";
+                        INSERT INTO Sales(InvoiceNumber, SalesmanId, SaleDate, GrandTotal)
+                        VALUES(@InvoiceNumber, @SalesmanId, @SaleDate, @GrandTotal);
+        SELECT last_insert_rowid(); ";
 
 
                 int generatedSaleId;
@@ -508,6 +616,7 @@ public class DatabaseManager
         return history;
     }
 
+
     //========================
     //STAFF MANAGEMENT
     //========================
@@ -572,7 +681,7 @@ public class DatabaseManager
             Console.WriteLine($"[DATABASE ERROR] Failed to fetch salesman list: {ex.Message}");
         }
         catch (Exception ex)
-        {    
+        {
             Console.WriteLine($"[GENERAL ERROR] An unexpected error occurred: {ex.Message}");
         }
 

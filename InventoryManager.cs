@@ -162,6 +162,36 @@ public class InventoryManager
 
     }
 
+    public void AddCompany()
+    {
+        Console.WriteLine("Enter the company details:");
+
+        Console.Write("Name: ");
+        string? name = Console.ReadLine();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            Console.WriteLine("[INPUT ERROR] Name cannot be empty.");
+            return;
+        }
+
+       
+        Console.WriteLine("Enter Contact (Press Enter If Null): ");
+        string? contact = Console.ReadLine();
+        if (string.IsNullOrWhiteSpace(contact))
+        {
+            contact = "None";
+        }
+
+
+        Company newCompany = new Company
+        {
+            Name = name,
+            Contact = contact
+        };
+
+        _dbManager.AddCompanies(newCompany);
+        Console.WriteLine("Company added successfully.");
+    }
 
     public void SearchAndDisplayByName(string nameQuery)
     {
@@ -199,6 +229,34 @@ public class InventoryManager
         catch (Exception ex)
         {
             Console.WriteLine($"[Error] Search failed: {ex.Message}");
+        }
+    }
+
+    public void ViewReorderList()
+    {
+        try
+        {
+            List<ReorderDTO> reorderList = _dbManager.GetReorderList() ?? new List<ReorderDTO>();
+
+            if (reorderList.Count == 0)
+            {
+                Console.WriteLine("Reorder list is empty.");
+                return;
+            }
+
+            Console.WriteLine("\n--- REORDER LIST ---");
+            Console.WriteLine($"{"Code",-10} {"Name",-20} {"Company Name",-20} {"Stock",-8} {"Reorder Level (-)",-10}");
+            Console.WriteLine(new string('-', 52));
+
+            foreach (var med in reorderList)
+            {
+                Console.WriteLine($"{med.MedicineCode,-10} {med.MedicineName,-20} {med.CompanyName,-20} {med.CurrentStock,-8} {med.MinReorderLevel,-10}");
+            }
+            Console.WriteLine(new string('-', 52) + "\n");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Error] Failed to retrieve reorder list: {ex.Message}");
         }
     }
 }
