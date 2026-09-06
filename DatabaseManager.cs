@@ -51,6 +51,16 @@ public class DatabaseManager
                     
                 );
 
+                 CREATE TABLE IF NOT EXISTS Salesmen(
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    SalesmanCode TEXT NOT NULL UNIQUE,
+                    Name TEXT NOT NULL,
+                    PasswordHash TEXT NOT NULL,
+                    Role TEXT NOT NULL CHECK(Role IN ('Admin', 'Salesman')),
+                    IsActive INTEGER NOT NULL DEFAULT 1
+                    
+                );
+
                 CREATE TABLE IF NOT EXISTS Sales (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     InvoiceNumber TEXT NOT NULL UNIQUE,
@@ -71,15 +81,7 @@ public class DatabaseManager
                     FOREIGN KEY (BatchId) REFERENCES Batches(Id)
                 );
 
-                CREATE TABLE IF NOT EXISTS Salesmen(
-                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    SalesmanCode TEXT NOT NULL UNIQUE,
-                    Name TEXT NOT NULL,
-                    PasswordHash TEXT NOT NULL,
-                    Role TEXT NOT NULL CHECK(Role IN ('Admin', 'Salesman')),
-                    IsActive INTEGER NOT NULL DEFAULT 1
-                    
-                );
+               
 
                 CREATE TABLE IF NOT EXISTS Companies (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,9 +111,6 @@ public class DatabaseManager
             }
 
 
-
-
-
             return true;
         }
         catch (UnauthorizedAccessException ex)
@@ -131,6 +130,9 @@ public class DatabaseManager
         }
     }
 
+    
+
+
     // ==========================================
     // INVENTORY OPERATIONS
     // ==========================================
@@ -138,8 +140,8 @@ public class DatabaseManager
     public void AddMedicine(Medicine medicine)
     {
         string insertSql = @"
-                INSERT INTO Medicines (MedicineCode, Name, Category, Price)
-                VALUES (@MedicineCode, @Name, @Category, @Price);";
+                INSERT INTO Medicines (MedicineCode, Name, Category, Price, CompanyId, MinReorderLevel, ReorderQuantity)
+                VALUES (@MedicineCode, @Name, @Category, @Price, @CompanyId, @MinReorderLevel, @ReorderQuantity);";
 
         try
         {
@@ -151,6 +153,9 @@ public class DatabaseManager
                 command.Parameters.AddWithValue("@Name", medicine.Name);
                 command.Parameters.AddWithValue("@Category", medicine.Category);
                 command.Parameters.AddWithValue("@Price", medicine.Price);
+                command.Parameters.AddWithValue("@CompanyId", medicine.CompanyId);
+                command.Parameters.AddWithValue("@MinReorderLevel", medicine.MinReorderLevel);
+                command.Parameters.AddWithValue("@ReorderQuantity", medicine.ReorderQuantity);
 
 
                 command.ExecuteNonQuery();
@@ -400,7 +405,7 @@ public class DatabaseManager
             COALESCE(SUM(b.Quantity), 0) AS CurrentStock
         FROM Medicines m
         INNER JOIN Companies c ON m.CompanyId = c.Id
-        LEFT JOIN Batches b ON m.Id = b.MedicineId AND b.ExpiryDate >= DATE('now')
+        LEFT JOIN Batches b ON m.Id = b.MedicineId AND b.ExpiryDate > DATE('now')
         GROUP BY m.Id, c.Name, m.MedicineCode, m.Name, m.MinReorderLevel, m.ReorderQuantity
         HAVING CurrentStock <= m.MinReorderLevel
         ORDER BY c.Name ASC, m.Name ASC;";
@@ -457,6 +462,7 @@ public class DatabaseManager
     // ==========================================
 
 
+
     public bool ExecuteSale(Sale sale)
     {
         if (sale == null || sale.Items == null || sale.Items.Count == 0)
@@ -473,7 +479,7 @@ public class DatabaseManager
                 string insertSaleSql = @"
                         INSERT INTO Sales(InvoiceNumber, SalesmanId, SaleDate, GrandTotal)
                         VALUES(@InvoiceNumber, @SalesmanId, @SaleDate, @GrandTotal);
-        SELECT last_insert_rowid(); ";
+                        SELECT last_insert_rowid();";
 
 
                 int generatedSaleId;
@@ -485,7 +491,15 @@ public class DatabaseManager
                     saleCmd.Parameters.AddWithValue("@GrandTotal", sale.GrandTotal);
 
                     //Execute query and extract auto-generated Sales.Id
-                    generatedSaleId = Convert.ToInt32(saleCmd.ExecuteScalar());
+
+                    object result = saleCmd.ExecuteScalar();
+
+                    if (result == null || result == DBNull.Value)
+                    {
+                        throw new Exception("Failed to retrieve auto-generated SaleId.");
+                    }
+
+                    generatedSaleId = Convert.ToInt32(result);
                 }
 
                 string updateStockSql = @"

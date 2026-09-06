@@ -70,16 +70,47 @@ public class InventoryManager
             Console.WriteLine("[INPUT ERROR] Price must be a valid positive number. Restock cancelled.");
             return;
         }
+        
+        // 4. Comapny ID
+        Console.WriteLine("Enter CompanyID: ");
+        string? rawCompanyId = Console.ReadLine();
+        if (!int.TryParse(rawCompanyId, out int companyId) || companyId < 0)
+        {
+            Console.WriteLine("[INPUT ERROR] Company ID must be a valid positive number. Restock cancelled.");
+            return;
+        }
+        
+        // 5. Minimun Reorder Level
+        Console.WriteLine("Enter Minimun Reorder Level:");
+        string ? rawMinReorderLevel = Console.ReadLine();
+        if (!int.TryParse(rawMinReorderLevel, out int minReorderLevel) || minReorderLevel < 0)
+        {
+            Console.WriteLine("[INPUT ERROR] Minimum Reorder Level must be a valid positive number. Restock cancelled.");
+            return;
+        }
+
+        // 6. Reorder Quantity
+        Console.WriteLine("Enter Reorder Quantity:");
+        string? rawReorderQuantity = Console.ReadLine();
+        if(!int.TryParse(rawReorderQuantity, out int ReorderQuantity) || ReorderQuantity < 0)
+        {
+            Console.WriteLine("[INPUT ERROR] Minimum Reorder Quantity must be a valid positive number. Restock cancelled.");
+            return;
+        }
 
 
 
-        // 5. Instantiation (medCode, name, category are all guaranteed 'string')
+        // 7. Instantiation (medCode, name, category are all guaranteed 'string')
         Medicine newMed = new Medicine
         {
             MedicineCode = medCode,
             Name = name,
             Category = category,
-            Price = price
+            Price = price,
+            CompanyId = companyId,
+            MinReorderLevel = minReorderLevel,
+            ReorderQuantity = ReorderQuantity
+
 
         };
 
@@ -245,7 +276,7 @@ public class InventoryManager
             }
 
             Console.WriteLine("\n--- REORDER LIST ---");
-            Console.WriteLine($"{"Code",-10} {"Name",-20} {"Company Name",-20} {"Stock",-8} {"Reorder Level (-)",-10}");
+            Console.WriteLine($"{"Code",-10} {"Name",-20} {"Company Name",-20} {"Stock",-8} {"Reorder Quantity (-)",-10}");
             Console.WriteLine(new string('-', 52));
 
             foreach (var med in reorderList)

@@ -37,7 +37,7 @@ try
             Console.WriteLine("\n[MAIN MENU]");
             Console.WriteLine("1. Sales / POS");
             Console.WriteLine("2. Inventory");
-            Console.WriteLine("3.Staff Management");
+            Console.WriteLine("3. Staff Management");
             Console.WriteLine("4. Exit");
             Console.Write("Enter choice: ");
 
@@ -211,7 +211,9 @@ void RunInventoryMenu(InventoryManager inventory)
             Console.WriteLine("2. Add Bacthes");
             Console.WriteLine("3. View Total Inventory");
             Console.WriteLine("4. Search Medicies by Name");
-            Console.WriteLine("5. Return to Main Menu");
+            Console.WriteLine("5. Add Company");
+            Console.WriteLine("6. View Reorder List");
+            Console.WriteLine("7. Return to Main Menu");
             Console.Write("Choose an option: ");
 
             string? choice = Console.ReadLine();
@@ -233,6 +235,12 @@ void RunInventoryMenu(InventoryManager inventory)
                     inventory.SearchAndDisplayByName(nameQuery ?? string.Empty);
                     break;
                 case "5":
+                    inventory.AddCompany();
+                    break;
+                case "6":
+                    inventory.ViewReorderList();
+                    break;
+                case "7":
                     inInventoryMenu = false;
                     break;
                 default:
@@ -275,6 +283,7 @@ void RunStaffMenu(StaffManager staff)
                 case "2":
                     staff.DisplayAllStaff();
                     break;
+                
                 case "3":
                     inStaffMenu = false;
                     break;
