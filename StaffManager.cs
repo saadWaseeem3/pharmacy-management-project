@@ -56,13 +56,14 @@ public class StaffManager
     {
         var staffList = _databaseManager.GetSalesmanList();
 
-        Console.WriteLine("\n=======================================================");
-        Console.WriteLine("ID   | CODE     | NAME               | ROLE     ");
-        Console.WriteLine("-------------------------------------------------------");
+        Console.WriteLine("\n");
+        Console.WriteLine(new string('=', 15) + " Staff List " + new string('=', 15));
+        Console.WriteLine($"{"ID",-4} {"CODE",-8} {"NAME",-18} {"ROLE"}");
+        Console.WriteLine(new string('=', 42));
         foreach(var s in staffList)
         {
-            Console.WriteLine($"{s.Id,-4} | {s.SalesmanCode,-8} | {s.Name,-18} | {s.Role,-8}");
+            Console.WriteLine($"{s.Id,-4} {s.SalesmanCode,-8} {s.Name,-18} {s.Role,-8}");
         }
-        Console.WriteLine("=======================================================");
+        Console.WriteLine(new string('=', 42) + "\n");
     }
 }

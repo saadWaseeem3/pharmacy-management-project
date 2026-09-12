@@ -18,7 +18,7 @@ public class InventoryManager
 
     public void DisplayTotalInventory()
     {
-        Console.WriteLine("----Total Inventory Report----");
+        
 
         List<MedicineWithBatch> stock = _dbManager.GetAllMedicines() ?? new List<MedicineWithBatch>();
 
@@ -28,11 +28,61 @@ public class InventoryManager
             return;
         }
 
+        Console.WriteLine("\n");
+        Console.WriteLine(new string('=',20) + " Total Inventory " + new string('=',21));
+        Console.WriteLine($"{"ID",-5} {"Medicine Code",-20} {"Name",-20} {"Category",-20} {"Quantity",-10} {"Price"}");
+        Console.WriteLine(new string('=', 85));
+
         foreach (var medicine in stock)
         {
-            Console.WriteLine($"ID: {medicine.MedicineId}, Medicine Code: {medicine.MedicineCode}, Name: {medicine.Name}, Category: {medicine.Category}, Quantity: {medicine.TotalQuantity}, Price: {medicine.Price}");
+            Console.WriteLine($"{medicine.MedicineId,-5} {medicine.MedicineCode,-20} {medicine.Name,-20} {medicine.Category,-20} {medicine.TotalQuantity,-10} {medicine.Price}");
         }
-        Console.WriteLine("-----------------------------");
+        Console.WriteLine(new string('=', 85) + "\n");
+    }
+
+    public void DisplayAllCompanies()
+    {
+        
+        List<Company> companies = _dbManager.GetAllCompanies() ?? new List<Company>();
+
+        if (companies.Count == 0)
+        {
+            Console.WriteLine("No medicines found in the inventory.");
+            return;
+        }
+
+        Console.WriteLine("\n");
+        Console.WriteLine(new string('=',20) + " COMPANIES " + new string('=',21));
+        Console.WriteLine($"{"ID",-10} {"Name",-20} {"Contact"}");
+        Console.WriteLine(new string('=', 52));
+
+        foreach (var company in companies)
+        {
+            Console.WriteLine($"{company.Id,-10} {company.Name,-20} {company.Contact}");
+        }
+        Console.WriteLine(new string('=', 52) + "\n");
+    }
+
+    public void DisplayAllBatches()
+    {
+        List<Batch> batches = _dbManager.ViewAllBatches() ?? new List<Batch>();
+
+        if (batches.Count == 0)
+        {
+            Console.WriteLine("No medicines found in the inventory.");
+            return;
+        }
+
+        Console.WriteLine("\n");
+        Console.WriteLine(new string('=', 21) + " BATCHES " + new string('=', 21));
+        Console.WriteLine($"{"ID",-5} {"MedicineID",-15} {"Batch Number",-20} {"Quantity",-10} {"Expiry Date"}");
+        Console.WriteLine(new string('=', 75));
+
+        foreach (var batch in batches)
+        {
+            Console.WriteLine($"{batch.Id,-5} {batch.MedicineId,-15} {batch.BatchNumber,-20} {batch.Quantity,-10} {batch.ExpiryDate}");
+        }
+        Console.WriteLine(new string('=', 75) + "\n");
     }
 
     public void RestockMedicine()
@@ -275,15 +325,16 @@ public class InventoryManager
                 return;
             }
 
-            Console.WriteLine("\n--- REORDER LIST ---");
+            Console.WriteLine("\n");
+            Console.WriteLine(new string('=', 21) + " REORDER LIST " + new string('=', 21));
             Console.WriteLine($"{"Code",-10} {"Name",-20} {"Company Name",-20} {"Stock",-8} {"Reorder Quantity (-)",-10}");
-            Console.WriteLine(new string('-', 52));
+            Console.WriteLine(new string('=', 85));
 
             foreach (var med in reorderList)
             {
                 Console.WriteLine($"{med.MedicineCode,-10} {med.MedicineName,-20} {med.CompanyName,-20} {med.CurrentStock,-8} {med.MinReorderLevel,-10}");
             }
-            Console.WriteLine(new string('-', 52) + "\n");
+            Console.WriteLine(new string('=', 85) + "\n");
         }
         catch (Exception ex)
         {

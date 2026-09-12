@@ -212,8 +212,10 @@ void RunInventoryMenu(InventoryManager inventory)
             Console.WriteLine("3. View Total Inventory");
             Console.WriteLine("4. Search Medicies by Name");
             Console.WriteLine("5. Add Company");
-            Console.WriteLine("6. View Reorder List");
-            Console.WriteLine("7. Return to Main Menu");
+            Console.WriteLine("6. View All Companies");
+            Console.WriteLine("7. View All Batches");
+            Console.WriteLine("8. View Reorder List");
+            Console.WriteLine("9. Return to Main Menu");
             Console.Write("Choose an option: ");
 
             string? choice = Console.ReadLine();
@@ -238,13 +240,19 @@ void RunInventoryMenu(InventoryManager inventory)
                     inventory.AddCompany();
                     break;
                 case "6":
-                    inventory.ViewReorderList();
+                    inventory.DisplayAllCompanies();
                     break;
                 case "7":
+                    inventory.DisplayAllBatches();
+                    break;
+                case "8":
+                    inventory.ViewReorderList();
+                    break;
+                case "9":
                     inInventoryMenu = false;
                     break;
                 default:
-                    Console.WriteLine("Invalid option. Enter 1, 2, 3 or 4.");
+                    Console.WriteLine("Invalid option.");
                     break;
             }
         }

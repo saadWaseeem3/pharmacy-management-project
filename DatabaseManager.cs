@@ -38,6 +38,23 @@ public class DatabaseManager
     {
 
         string createTableSql = @"
+
+                 CREATE TABLE IF NOT EXISTS Companies (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Name TEXT NOT NULL,
+                    Contact TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS Salesmen(
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    SalesmanCode TEXT NOT NULL UNIQUE,
+                    Name TEXT NOT NULL,
+                    PasswordHash TEXT NOT NULL,
+                    Role TEXT NOT NULL CHECK(Role IN ('Admin', 'Salesman')),
+                    IsActive INTEGER NOT NULL DEFAULT 1
+                    
+                );
+
                 CREATE TABLE IF NOT EXISTS Medicines (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     MedicineCode TEXT UNIQUE NOT NULL,
@@ -51,14 +68,14 @@ public class DatabaseManager
                     
                 );
 
-                 CREATE TABLE IF NOT EXISTS Salesmen(
+                CREATE TABLE IF NOT EXISTS Batches (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    SalesmanCode TEXT NOT NULL UNIQUE,
-                    Name TEXT NOT NULL,
-                    PasswordHash TEXT NOT NULL,
-                    Role TEXT NOT NULL CHECK(Role IN ('Admin', 'Salesman')),
-                    IsActive INTEGER NOT NULL DEFAULT 1
-                    
+                    MedicineId INTEGER NOT NULL,
+                    BatchNumber TEXT NOT NULL,
+                    Quantity INTEGER NOT NULL,
+                    ExpiryDate TEXT NOT NULL,
+
+                    FOREIGN KEY (MedicineId) REFERENCES Medicines(Id) ON DELETE RESTRICT
                 );
 
                 CREATE TABLE IF NOT EXISTS Sales (
@@ -69,6 +86,7 @@ public class DatabaseManager
                     GrandTotal REAL NOT NULL DEFAULT 0.0,
                     FOREIGN KEY (SalesmanId) REFERENCES Salesmen(Id)
                 );
+                
                 CREATE TABLE IF NOT EXISTS SaleDetails (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     SaleId INTEGER NOT NULL,
@@ -79,25 +97,7 @@ public class DatabaseManager
                     SubTotal REAL NOT NULL,
                     FOREIGN KEY (SaleId) REFERENCES Sales(Id),
                     FOREIGN KEY (BatchId) REFERENCES Batches(Id)
-                );
-
-               
-
-                CREATE TABLE IF NOT EXISTS Companies (
-                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    Name TEXT NOT NULL,
-                    Contact TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS Batches (
-                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    MedicineId INTEGER NOT NULL,
-                    BatchNumber TEXT NOT NULL,
-                    Quantity INTEGER NOT NULL,
-                    ExpiryDate TEXT NOT NULL,
-
-                    FOREIGN KEY (MedicineId) REFERENCES Medicines(Id) ON DELETE RESTRICT
-                    );";
+                );";
 
 
 
@@ -130,7 +130,7 @@ public class DatabaseManager
         }
     }
 
-    
+
 
 
     // ==========================================
@@ -278,6 +278,85 @@ public class DatabaseManager
 
         return medicineList;
     }
+
+    public List<Company> GetAllCompanies()
+    {
+        List<Company> companyList = new List<Company>();
+
+        string selectSql = @"
+        SELECT Id, Name, Contact
+        FROM Companies;";
+        try
+        {
+            using (var connection = GetConnection())
+            using (var command = new SqliteCommand(selectSql, connection))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    companyList.Add(new Company
+                    {
+                        Id = reader.GetInt32(0),
+                        Name = reader.GetString(1),
+                        Contact = reader.GetString(2)
+                    });
+                }
+            }
+
+        }
+        catch (SqliteException ex)
+        {
+            Console.WriteLine($"[Database Error]: Failed to retrieve companies: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[System Error]: Failed to load data: {ex.Message}");
+        }
+
+        return companyList;
+    }
+
+
+    public List<Batch> ViewAllBatches()
+    {
+        List<Batch> batchList = new List<Batch>();
+
+        string selectSql = @"
+        SELECT Id, MedicineId, BatchNumber, Quantity, ExpiryDate
+        FROM Batches;";
+        try
+        {
+            using (var connection = GetConnection())
+            using (var command = new SqliteCommand(selectSql, connection))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    batchList.Add(new Batch
+                    {
+                        Id = reader.GetInt32(0),
+                        MedicineId = reader.GetInt32(1),
+                        BatchNumber = reader.GetString(2),
+                        Quantity = reader.GetInt32(3),
+                        ExpiryDate = reader.GetDateTime(4)
+                    });
+                }
+            }
+
+        }
+        catch (SqliteException ex)
+        {
+            Console.WriteLine($"[Database Error]: Failed to retrieve batches: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[System Error]: Failed to load data: {ex.Message}");
+        }
+
+        return batchList;
+    }
+
+
 
     public List<MedicineWithBatch> SearchMedicinesByName(string searchTerm)
     {
